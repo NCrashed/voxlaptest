@@ -79,3 +79,15 @@ DLLEXPORT void set_colfunc(long (*v)(lpoint3d *)) {
 DLLEXPORT void vox_free(void* ptr) {
 	free(ptr);
 }
+
+DLLEXPORT void set_jitamount(long v) {
+	vx5.amount = v;
+}
+
+DLLEXPORT long get_curcol() {
+	return vx5.curcol;
+}
+
+DLLEXPORT long get_jitamount() {
+	return vx5.amount;
+}
