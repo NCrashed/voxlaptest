@@ -3375,7 +3375,7 @@ void kzclose ()
 //====================== ZIP decompression code ends =========================
 //===================== HANDY PICTURE function begins ========================
 
-void kpzload (const char *filnam, long *pic, long *bpl, long *xsiz, long *ysiz)
+DLLEXPORT extern void kpzload (const char *filnam, long *pic, long *bpl, long *xsiz, long *ysiz)
 {
 	char *buf;
 	long leng;

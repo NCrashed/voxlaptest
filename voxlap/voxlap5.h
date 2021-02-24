@@ -7,7 +7,7 @@
 #define VSID 2048   //Maximum .VXL dimensions in both x & y direction
 #define MAXZDIM 256 //Maximum .VXL dimensions in z direction (height)
 
-#define DLLEXPORT __declspec(dllexport) 
+#define DLLEXPORT __declspec(dllexport)
 
 #pragma pack(push,1)
 
@@ -65,7 +65,7 @@ typedef struct vx5sprite
 					//flags bit 1:0=points to kv6data, 1=points to kfatype
 					//flags bit 2:0=normal, 1=invisible sprite
 	union { point3d s, x; }; //kv6data.xsiz direction in VXL coordinates
-	union 
+	union
 	{
 		kv6data *voxnum; //pointer to KV6 voxel data (bit 1 of flags = 0)
 		kfatype *kfaptr; //pointer to KFA animation  (bit 1 of flags = 1)
