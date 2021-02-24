@@ -5013,11 +5013,11 @@ long loadvxl (const char *lodfilnam, dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe
 		printf("Wrong magic number %#010x\n", i);
 		return(0);
 	}
-	kzread(&i,4); if (i > VSID) {
+	kzread(&i,4); if (i != VSID) {
 		printf("Wrong max X size of map %d\n", i);
 		return(0);
 	}
-	kzread(&i,4); if (i > VSID){
+	kzread(&i,4); if (i != VSID){
 		printf("Wrong max Y size of map %d\n", i);
 		return(0);
 	}
@@ -5050,7 +5050,7 @@ long loadvxl (const char *lodfilnam, dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe
 	gmipnum = 1; vx5.flstnum = 0;
 	updatebbox(0,0,0,VSID,VSID,MAXZDIM,0);
 
-	// printf("Opened file %s\n", lodfilnam);
+	printf("Opened file %s\n", lodfilnam);
 	return(1);
 }
 
