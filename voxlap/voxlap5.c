@@ -51,16 +51,16 @@ static long *vbuf = 0, *vbit = 0, vbiti;
 	//WARNING: loaddta uses last 2MB of vbuf; vbuf:[VOXSIZ>>2], vbit:[VOXSIZ>>7]
 	//WARNING: loadpng uses last 4MB of vbuf; vbuf:[VOXSIZ>>2], vbit:[VOXSIZ>>7]
 
-//                     ÚÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄ¿
-//        vbuf format: ³   0:   ³   1:   ³   2:   ³   3:   ³
-//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄ´
-//³      First header: ³ nextptr³   z1   ³   z1c  ³  dummy ³
-//³           Color 1: ³    b   ³    g   ³    r   ³ intens ³
-//³           Color 2: ³    b   ³    g   ³    r   ³ intens ³
-//³             ...    ³    b   ³    g   ³    r   ³ intens ³
-//³           Color n: ³    b   ³    g   ³    r   ³ intens ³
-//³ Additional header: ³ nextptr³   z1   ³   z1c  ³   z0   ³
-//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÙ
+//                     ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿
+//        vbuf format: ï¿½   0:   ï¿½   1:   ï¿½   2:   ï¿½   3:   ï¿½
+//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä´
+//ï¿½      First header: ï¿½ nextptrï¿½   z1   ï¿½   z1c  ï¿½  dummy ï¿½
+//ï¿½           Color 1: ï¿½    b   ï¿½    g   ï¿½    r   ï¿½ intens ï¿½
+//ï¿½           Color 2: ï¿½    b   ï¿½    g   ï¿½    r   ï¿½ intens ï¿½
+//ï¿½             ...    ï¿½    b   ï¿½    g   ï¿½    r   ï¿½ intens ï¿½
+//ï¿½           Color n: ï¿½    b   ï¿½    g   ï¿½    r   ï¿½ intens ï¿½
+//ï¿½ Additional header: ï¿½ nextptrï¿½   z1   ï¿½   z1c  ï¿½   z0   ï¿½
+//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 //  nextptr: add this # <<2 to index to get to next header (0 if none)
 //       z1: z floor (top of floor color list)
 //      z1c: z bottom of floor color list MINUS 1! - needed to calculate
@@ -1390,13 +1390,13 @@ static _inline void addusb (char *a, long b)
 }
 
 	// (cone diameter vs. % 3D angular area) or: (a vs. 2/(1-cos(a*.5*PI/180)))
-	// ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄ¿
-	// ³  0: inf     ³ 25: 84.37 ³ 50: 21.35 ³ 75: 9.68 ³ 100: 5.60 ³ 180: 2  ³
-	// ³  5: 2101.33 ³ 30: 58.70 ³ 55: 17.70 ³ 80: 8.55 ³ 105: 5.11 ³ 360: 1  ³
-	// ³ 10:  525.58 ³ 35: 43.21 ³ 60: 14.93 ³ 85: 7.61 ³ 110: 4.69 ÃÄÄÄÄÄÄÄÄÄÙ
-	// ³ 15:  233.78 ³ 40: 33.16 ³ 65: 12.77 ³ 90: 6.83 ³ 115: 4.32 ³
-	// ³ 20:  131.65 ³ 45: 26.27 ³ 70: 11.06 ³ 95: 6.17 ³ 120: 4    ³
-	// ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÙ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿
+	// ï¿½  0: inf     ï¿½ 25: 84.37 ï¿½ 50: 21.35 ï¿½ 75: 9.68 ï¿½ 100: 5.60 ï¿½ 180: 2  ï¿½
+	// ï¿½  5: 2101.33 ï¿½ 30: 58.70 ï¿½ 55: 17.70 ï¿½ 80: 8.55 ï¿½ 105: 5.11 ï¿½ 360: 1  ï¿½
+	// ï¿½ 10:  525.58 ï¿½ 35: 43.21 ï¿½ 60: 14.93 ï¿½ 85: 7.61 ï¿½ 110: 4.69 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	// ï¿½ 15:  233.78 ï¿½ 40: 33.16 ï¿½ 65: 12.77 ï¿½ 90: 6.83 ï¿½ 115: 4.32 ï¿½
+	// ï¿½ 20:  131.65 ï¿½ 45: 26.27 ï¿½ 70: 11.06 ï¿½ 95: 6.17 ï¿½ 120: 4    ï¿½
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 void setflash (float px, float py, float pz, long flashradius, long numang, long intens)
 {
 	unsigned __int64 q;
@@ -1785,13 +1785,13 @@ void setnormflash (float px, float py, float pz, long flashradius, long intens)
 
 	xbsox = -17;
 
-		//       ÚÄ 7Ä¿
+		//       ï¿½ï¿½ 7Ä¿
 		//      11  . 8
-		//  ÚÄ11ÄÅÄ 4ÄÅÄ 8ÄÂÄ 7Ä¿
+		//  ï¿½ï¿½11ï¿½ï¿½ï¿½ 4ï¿½ï¿½ï¿½ 8ï¿½ï¿½ï¿½ 7Ä¿
 		//  3 |  0  + 1  | 2  + 3
-		//  ÀÄ10ÄÅÄ 5ÄÅÄ 9ÄÁÄ 6ÄÙ
+		//  ï¿½ï¿½10ï¿½ï¿½ï¿½ 5ï¿½ï¿½ï¿½ 9ï¿½ï¿½ï¿½ 6ï¿½ï¿½
 		//      10  . 9
-		//       ÀÄ 6ÄÙ
+		//       ï¿½ï¿½ 6ï¿½ï¿½
 
 		//Do left&right faces of the cube
 	for(j=1;j>=0;j--)
@@ -2246,14 +2246,14 @@ skip1ha:
 
 		sub esi, 16
 
-		 ;eax: temp   ³ mm0:  z0 argb0   argb1 argb0 ³ xmm0: plc3 plc2 plc1 plc0
-		 ;ebx:  -     ³ mm1:  z1 argb1               ³ xmm1: acc3 acc2 acc1 acc0
-		 ;ecx:zbufoff ³ mm2:  z2 argb2   argb3 argb2 ³ xmm2: inc3 inc2 inc1 inc0
-		 ;edx:  j     ³ mm3:  z3 argb3               ³ xmm3:  r3   r2   r1   r0
-		 ;esi:  -     ³ mm4:              z1    z0   ³ xmm4:            z3   z2
-		 ;edi:scroff  ³ mm5:              z3    z2   ³ xmm5:
-		 ;ebp:  -     ³ mm6: plc1 plc0               ³ xmm6:
-beg4h: ;esp:  -     ³ mm7: inc1 inc0               ³ xmm7:  z3   z2   z1   z0
+		 ;eax: temp   ï¿½ mm0:  z0 argb0   argb1 argb0 ï¿½ xmm0: plc3 plc2 plc1 plc0
+		 ;ebx:  -     ï¿½ mm1:  z1 argb1               ï¿½ xmm1: acc3 acc2 acc1 acc0
+		 ;ecx:zbufoff ï¿½ mm2:  z2 argb2   argb3 argb2 ï¿½ xmm2: inc3 inc2 inc1 inc0
+		 ;edx:  j     ï¿½ mm3:  z3 argb3               ï¿½ xmm3:  r3   r2   r1   r0
+		 ;esi:  -     ï¿½ mm4:              z1    z0   ï¿½ xmm4:            z3   z2
+		 ;edi:scroff  ï¿½ mm5:              z3    z2   ï¿½ xmm5:
+		 ;ebp:  -     ï¿½ mm6: plc1 plc0               ï¿½ xmm6:
+beg4h: ;esp:  -     ï¿½ mm7: inc1 inc0               ï¿½ xmm7:  z3   z2   z1   z0
 		pextrw eax, mm6, 1
 		mov eax, angstart[eax*4]
 		movq mm0, [eax+edx*8]
@@ -2429,14 +2429,14 @@ skip1ha:
 
 		sub esi, 16
 
-		 ;eax: temp   ³ mm0:  z0 argb0   argb1 argb0 ³ xmm0: plc3 plc2 plc1 plc0
-		 ;ebx:  -     ³ mm1:  z1 argb1               ³ xmm1: acc3 acc2 acc1 acc0
-		 ;ecx:zbufoff ³ mm2:  z2 argb2   argb3 argb2 ³ xmm2: inc3 inc2 inc1 inc0
-		 ;edx:  j     ³ mm3:  z3 argb3               ³ xmm3:  r3   r2   r1   r0
-		 ;esi:  -     ³ mm4:              z1    z0   ³ xmm4:            z3   z2
-		 ;edi:scroff  ³ mm5:              z3    z2   ³ xmm5:
-		 ;ebp:  -     ³ mm6: plc1 plc0               ³ xmm6:
-		 ;esp:  -     ³ mm7: inc1 inc0               ³ xmm7:  z3   z2   z1   z0
+		 ;eax: temp   ï¿½ mm0:  z0 argb0   argb1 argb0 ï¿½ xmm0: plc3 plc2 plc1 plc0
+		 ;ebx:  -     ï¿½ mm1:  z1 argb1               ï¿½ xmm1: acc3 acc2 acc1 acc0
+		 ;ecx:zbufoff ï¿½ mm2:  z2 argb2   argb3 argb2 ï¿½ xmm2: inc3 inc2 inc1 inc0
+		 ;edx:  j     ï¿½ mm3:  z3 argb3               ï¿½ xmm3:  r3   r2   r1   r0
+		 ;esi:  -     ï¿½ mm4:              z1    z0   ï¿½ xmm4:            z3   z2
+		 ;edi:scroff  ï¿½ mm5:              z3    z2   ï¿½ xmm5:
+		 ;ebp:  -     ï¿½ mm6: plc1 plc0               ï¿½ xmm6:
+		 ;esp:  -     ï¿½ mm7: inc1 inc0               ï¿½ xmm7:  z3   z2   z1   z0
 
 		movq mm7bak, mm7
 beg4h:pextrw eax, mm6, 1
@@ -4043,7 +4043,7 @@ long sphtrace (double x0, double y0, double z0,          //start pt
 					double *clpx, double *clpy, double *clpz, //pt causing collision
 					double cr, double acr)
 {
-	double f, t, dax, day, daz, vyx, vxy, vxz, vyz, rvz, cr2, fz, fc;
+	double f, t, dax, day, daz = 0.0, vyx, vxy, vxz, vyz, rvz, cr2, fz, fc;
 	double dx, dy, dx1, dy1;
 	double nx, ny, intx, inty, intz, dxy, dxz, dyz, dxyz, rxy, rxz, ryz, rxyz;
 	long i, j, x, y, ix, iy0, iy1, i0, i1, iz[2], cz0, cz1;
@@ -4145,11 +4145,11 @@ long sphtrace (double x0, double y0, double z0,          //start pt
 			intx = t*vxz + x0;
 			inty = t*vyz + y0;
 
-			j = 0;                         // A ³ 8 ³ 9
-			//     if (intx < dx)  j |= 2; //ÄÄÄÅÄÄÄÅÄÄÄ
-			//else if (intx > dx1) j |= 1; // 2 ³ 0 ³ 1
-			//     if (inty < dy)  j |= 8; //ÄÄÄÅÄÄÄÅÄÄÄ
-			//else if (inty > dy1) j |= 4; // 6 ³ 4 ³ 5
+			j = 0;                         // A ï¿½ 8 ï¿½ 9
+			//     if (intx < dx)  j |= 2; //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+			//else if (intx > dx1) j |= 1; // 2 ï¿½ 0 ï¿½ 1
+			//     if (inty < dy)  j |= 8; //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+			//else if (inty > dy1) j |= 4; // 6 ï¿½ 4 ï¿½ 5
 				  if (((long *)&intx)[1] <  ((long *)&dx)[1])  j |= 2;
 			else if (((long *)&intx)[1] >= ((long *)&dx1)[1]) j |= 1;
 				  if (((long *)&inty)[1] <  ((long *)&dy)[1])  j |= 8;
@@ -5005,12 +5005,22 @@ long loadvxl (const char *lodfilnam, dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe
 	if (!vbuf) { vbuf = (long *)malloc((VOXSIZ>>2)<<2); if (!vbuf) evilquit("vbuf malloc failed"); }
 	if (!vbit) { vbit = (long *)malloc((VOXSIZ>>7)<<2); if (!vbit) evilquit("vbuf malloc failed"); }
 
+	printf("Opening file %s\n", lodfilnam);
 	if (!kzopen(lodfilnam)) return(0);
 	fsiz = kzfilelength();
 
-	kzread(&i,4); if (i != 0x09072000) return(0);
-	kzread(&i,4); if (i != VSID) return(0);
-	kzread(&i,4); if (i != VSID) return(0);
+	kzread(&i,4); if (i != 0x09072000) {
+		printf("Wrong magic number %#010x\n", i);
+		return(0);
+	}
+	kzread(&i,4); if (i > VSID) {
+		printf("Wrong max X size of map %d\n", i);
+		return(0);
+	}
+	kzread(&i,4); if (i > VSID){
+		printf("Wrong max Y size of map %d\n", i);
+		return(0);
+	}
 	kzread(ipo,24);
 	kzread(ist,24);
 	kzread(ihe,24);
@@ -5039,6 +5049,8 @@ long loadvxl (const char *lodfilnam, dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe
 
 	gmipnum = 1; vx5.flstnum = 0;
 	updatebbox(0,0,0,VSID,VSID,MAXZDIM,0);
+
+	// printf("Opened file %s\n", lodfilnam);
 	return(1);
 }
 
@@ -5896,13 +5908,13 @@ void genmipvxl (long x0, long y0, long x1, long y1)
 			sw = ssw+xsiz*y+x0;
 			for(x=x0;x<x1;x++)
 			{
-					//ÚÄÄÄÂÄÄÄÂÄÄÄÂÄÄÄ¿
-					//³npt³z1 ³z1c³dum³
-					//³ b ³ g ³ r ³ i ³
-					//³ b ³ g ³ r ³ i ³
-					//³npt³z1 ³z1c³z0 ³
-					//³ b ³ g ³ r ³ i ³
-					//ÀÄÄÄÁÄÄÄÁÄÄÄÁÄÄÄÙ
+					//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿
+					//ï¿½nptï¿½z1 ï¿½z1cï¿½dumï¿½
+					//ï¿½ b ï¿½ g ï¿½ r ï¿½ i ï¿½
+					//ï¿½ b ï¿½ g ï¿½ r ï¿½ i ï¿½
+					//ï¿½nptï¿½z1 ï¿½z1cï¿½z0 ï¿½
+					//ï¿½ b ï¿½ g ï¿½ r ï¿½ i ï¿½
+					//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 				v[0] = sr[      0];
 				v[1] = sr[      1];
 				v[2] = sr[oysiz  ];
@@ -6329,7 +6341,7 @@ void setcylinder (lpoint3d *p0, lpoint3d *p1, long cr, long dacol, long bakit)
 		vy0 = vx*bx + vyo; vyo += by;
 		vz0 = vx*cx + vzo; vzo += cy;
 
-		if (cz != 0)   //(vx0 + vx1*t)ý + (vy0 + vy1*t)ý = 1
+		if (cz != 0)   //(vx0 + vx1*t)ï¿½ + (vy0 + vy1*t)ï¿½ = 1
 		{
 			vz0 *= -rcz;
 			for(ix=ix0;ix<=ix1;ix++,vx0+=ax,vy0+=bx,vz0+=vz0i)
@@ -6649,7 +6661,7 @@ long triscan (point3d *p0, point3d *p1, point3d *p2, point3d *hit, lpoint3d *lhi
 							//         _|  (fx,fy,fz) |_
 							//       _|                 |_
 							//(p1->x,p1->y,p1->z)-.----(cp2.x,cp2.y,cp2.z)
-	
+
 						if ((fabs(n.z) > fabs(n.x)) && (fabs(n.z) > fabs(n.y)))
 						{ //x,y
 						  // ix = p1->x + (cp2.x-p1->x)*t;
@@ -6659,7 +6671,7 @@ long triscan (point3d *p0, point3d *p1, point3d *p2, point3d *hit, lpoint3d *lhi
 						  // iy = p0->y + (fy-p0->y)*u;
 						  // (p1->x-cp2.x)*t + (fx-p0->x)*u = p1->x-p0->x;
 						  // (p1->y-cp2.y)*t + (fy-p0->y)*u = p1->y-p0->y;
-	
+
 							f = (p1->x-cp2.x)*(fy-p0->y) - (p1->y-cp2.y)*(fx-p0->x);
 							if ((*(long *)&f) == 0) continue;
 							f = 1.0 / f;
@@ -7175,7 +7187,7 @@ void setsector (point3d *p, long *point2, long n, float thick, long dacol, long 
 {
 	void (*modslab)(long *, long, long);
 	point3d norm;
-	float f, rnormy, xth, zth, dax, daz, t, t1;
+	float f, rnormy, xth, zth, dax, daz = 0.0, t, t1;
 	long i, j, k, x, y, z, sn, s2, nn, xs, ys, zs, xe, ye, ze;
 
 	norm.x = 0; norm.y = 0; norm.z = 0;
@@ -7475,15 +7487,15 @@ void setblobs (point3d *p, long numcurs, long dacol, long bakit)
 						lea eax, [eax+eax*2-3]
 				 beg: movups xmm1, [edx+eax*4] ;xmm1: ?,pz,py,pz
 						subps xmm1, xmm0         ;xmm1: ?,dz,dy,dx
-						mulps xmm1, xmm1         ;xmm1: ?,dzý,dyý,dxý
-						movhlps xmm6, xmm1       ;xmm6: ?,256,?,dzý
-						shufps xmm1, xmm6, 0x84  ;xmm1: 256,dzý,dyý,dxý
-						movhlps xmm2, xmm1       ;xmm2: ?,?,256,dzý
-						addps xmm1, xmm2         ;xmm1: ?,?,dyý+256,dxý+dzý
-						movss xmm2, xmm1         ;xmm2: ?,?,256,dxý+dzý
-						shufps xmm1, xmm1, 0x1   ;xmm1: dxý+dzý,dxý+dzý,dxý+dzý,dyý+256
-						addss xmm1, xmm2         ;xmm1: ?,?,?,dxý+dyý+dzý+256
-						rcpss xmm1, xmm1         ;xmm1: ?,?,?,1/(dxý+dyý+dzý+256)
+						mulps xmm1, xmm1         ;xmm1: ?,dzï¿½,dyï¿½,dxï¿½
+						movhlps xmm6, xmm1       ;xmm6: ?,256,?,dzï¿½
+						shufps xmm1, xmm6, 0x84  ;xmm1: 256,dzï¿½,dyï¿½,dxï¿½
+						movhlps xmm2, xmm1       ;xmm2: ?,?,256,dzï¿½
+						addps xmm1, xmm2         ;xmm1: ?,?,dyï¿½+256,dxï¿½+dzï¿½
+						movss xmm2, xmm1         ;xmm2: ?,?,256,dxï¿½+dzï¿½
+						shufps xmm1, xmm1, 0x1   ;xmm1: dxï¿½+dzï¿½,dxï¿½+dzï¿½,dxï¿½+dzï¿½,dyï¿½+256
+						addss xmm1, xmm2         ;xmm1: ?,?,?,dxï¿½+dyï¿½+dzï¿½+256
+						rcpss xmm1, xmm1         ;xmm1: ?,?,?,1/(dxï¿½+dyï¿½+dzï¿½+256)
 						addss xmm3, xmm1
 						sub eax, 3
 						jnc short beg
@@ -8047,11 +8059,11 @@ long project2d (float x, float y, float z, float *px, float *py, float *sx)
 
 	ox = x-gipos.x; oy = y-gipos.y; oz = z-gipos.z;
 	z = ox*gifor.x + oy*gifor.y + oz*gifor.z; if (z < SCISDIST) return(0);
-	
+
 	z = gihz / z;
 	*px = (ox*gistr.x + oy*gistr.y + oz*gistr.z)*z + gihx;
 	*py = (ox*gihei.x + oy*gihei.y + oz*gihei.z)*z + gihy;
-	*sx = z;   
+	*sx = z;
 	return(1);
 }
 
@@ -8410,7 +8422,7 @@ void drawspherefill (float ox, float oy, float oz, float bakrad, long col)
 	e = -cy*f - gihy*g; e += e;
 	f = f*f + g*(gihx*gihx+gihy*gihy+gihz*gihz);
 
-		//isq = (b*b-4*a*c)yý + (2*b*d-4*a*e)y + (d*d-4*a*f) = 0
+		//isq = (b*b-4*a*c)yï¿½ + (2*b*d-4*a*e)y + (d*d-4*a*f) = 0
 	Za = b*b - a*c*4; if (!Za) return;
 	Zb = b*d*2 - a*e*4;
 	Zc = d*d - a*f*4;
@@ -8431,7 +8443,7 @@ void drawspherefill (float ox, float oy, float oz, float bakrad, long col)
 	if ((*(long *)&bakrad) >= 0)
 	{
 #endif
-		while (1)  //(a)xý + (b*y+d)x + (c*y*y+e*y+f) = 0
+		while (1)  //(a)xï¿½ + (b*y+d)x + (c*y*y+e*y+f) = 0
 		{
 			t = sqrt(isq); //fsqrtasm(&isq,&t);
 			ftol(nb-t,&sx1); if (sx1 < 0) sx1 = 0;
@@ -8456,7 +8468,7 @@ void drawspherefill (float ox, float oy, float oz, float bakrad, long col)
 					((((((vx5.fogcol>>16)&255)-((col>>16)&255))*sx)>>15)<<16) + col;
 		}
 
-		while (1)  //(a)xý + (b*y+d)x + (c*y*y+e*y+f) = 0
+		while (1)  //(a)xï¿½ + (b*y+d)x + (c*y*y+e*y+f) = 0
 		{
 			t = sqrt(isq); //fsqrtasm(&isq,&t);
 			ftol(nb-t,&sx1); if (sx1 < 0) sx1 = 0;
@@ -10477,7 +10489,7 @@ void genperp (point3d *a, point3d *b, point3d *c)
 	c->z = a->x*b->y - a->y*b->x;
 }
 
-	//A * B = C, find A   36*, 27E
+	//A * B = C, find A   36*, 27ï¿½E
 	//[asx ahx agx aox][bsx bhx bgx box]   [csx chx cgx cox]
 	//[asy ahy agy aoy][bsy bhy bgy boy] = [csy chy cgy coy]
 	//[asz ahz agz aoz][bsz bhz bgz boz]   [csz chz cgz coz]
@@ -10502,7 +10514,7 @@ void mat0 (point3d *as, point3d *ah, point3d *ag, point3d *ao,
 	(*as) = ts; (*ah) = th; (*ag) = tg; (*ao) = to;
 }
 
-	//A * B = C, find B   36*, 27E
+	//A * B = C, find B   36*, 27ï¿½E
 	//[asx ahx agx aox][bsx bhx bgx box]   [csx chx cgx cox]
 	//[asy ahy agy aoy][bsy bhy bgy boy] = [csy chy cgy coy]
 	//[asz ahz agz aoz][bsz bhz bgz boz]   [csz chz cgz coz]
@@ -10528,7 +10540,7 @@ void mat1 (point3d *as, point3d *ah, point3d *ag, point3d *ao,
 	(*bs) = ts; (*bh) = th; (*bg) = tg; (*bo) = to;
 }
 
-	//A * B = C, find C   36*, 27E
+	//A * B = C, find C   36*, 27ï¿½E
 	//[asx ahx afx aox][bsx bhx bfx box]   [csx chx cfx cox]
 	//[asy ahy afy aoy][bsy bhy bfy boy] = [csy chy cfy coy]
 	//[asz ahz afz aoz][bsz bhz bfz boz]   [csz chz cfz coz]
@@ -12297,8 +12309,8 @@ long surroundcapture32bit (dpoint3d *pos, const char *fname, long boxsiz)
 	float f;
 
 	//Picture layout:
-	//   ÛÛÛÛÛÛúúúú
-	//   úúúúÛÛÛÛÛÛ
+	//   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	//   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 	f = 2.0 / (float)boxsiz; hboxsiz = (boxsiz>>1);
 	pngoutopenfile(fname,boxsiz*5,boxsiz*2);
