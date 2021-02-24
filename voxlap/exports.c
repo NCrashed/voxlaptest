@@ -91,3 +91,30 @@ DLLEXPORT long get_curcol() {
 DLLEXPORT long get_jitamount() {
 	return vx5.amount;
 }
+
+DLLEXPORT long add_light(float px, float py, float pz, float flash_radius, float intens) {
+	long i = vx5.numlights;
+	vx5.lightsrc[i].p.x = px;
+	vx5.lightsrc[i].p.y = py;
+	vx5.lightsrc[i].p.z = pz;
+	vx5.lightsrc[i].r2 = flash_radius * flash_radius;
+	vx5.lightsrc[i].sc = intens;
+	vx5.numlights += 1;
+	return i;
+}
+
+DLLEXPORT long get_lights_count() {
+	return vx5.numlights;
+}
+
+DLLEXPORT void remove_light(long i) {
+	if (i < 0 || i >= vx5.numlights) return;
+	vx5.numlights -= 1;
+	long j = vx5.numlights;
+	if (j == 0) return;
+	vx5.lightsrc[i].p.x = vx5.lightsrc[j].p.x;
+	vx5.lightsrc[i].p.y = vx5.lightsrc[j].p.y;
+	vx5.lightsrc[i].p.z = vx5.lightsrc[j].p.z;
+	vx5.lightsrc[i].r2 = vx5.lightsrc[j].r2;
+	vx5.lightsrc[i].sc = vx5.lightsrc[j].sc;
+}
