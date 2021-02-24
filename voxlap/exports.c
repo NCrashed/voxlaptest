@@ -35,3 +35,47 @@ DLLEXPORT void setRectBrightness(lpoint3d* hit1, lpoint3d* hit2, char brightness
 DLLEXPORT void printString(long x, long y, long fcol, long bcol, const char* str){
 	print6x8(x,y,fcol,bcol,"%s",str);
 }
+
+DLLEXPORT void setLightingMode(long mode) {
+	vx5.lightmode = mode;
+}
+
+DLLEXPORT void setMaxScanDist(long v) {
+	vx5.maxscandist = v;
+}
+
+DLLEXPORT void set_anginc(long v) {
+	vx5.anginc = v;
+}
+
+DLLEXPORT long get_anginc() {
+	return vx5.anginc;
+}
+
+DLLEXPORT void set_curcol(long v) {
+	vx5.curcol = v;
+}
+
+DLLEXPORT void set_curpow(float v) {
+	vx5.curpow = v;
+}
+
+DLLEXPORT void set_fallcheck(long v) {
+	vx5.fallcheck = v;
+}
+
+DLLEXPORT void set_fogcol(long v) {
+	vx5.fogcol = v;
+}
+
+DLLEXPORT void set_kv6col(long v) {
+	vx5.kv6col = v;
+}
+
+DLLEXPORT void set_colfunc(long (*v)(lpoint3d *)) {
+	vx5.colfunc = v;
+}
+
+DLLEXPORT void vox_free(void* ptr) {
+	free(ptr);
+}
