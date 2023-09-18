@@ -2147,7 +2147,7 @@ void vrendzfog (long sx, long sy, long p1, long iplc, long iinc)
 
 #endif
 
-__declspec(noinline) void hrendzsse (long sx, long sy, long p1, long plc, long incr, long j)
+void hrendzsse (long sx, long sy, long p1, long plc, long incr, long j)
 {
 	_asm
 	{
@@ -2315,7 +2315,7 @@ endh: pop edi
 	}
 }
 
-__declspec(noinline) void hrendzfogsse (long sx, long sy, long p1, long plc, long incr, long j)
+void hrendzfogsse (long sx, long sy, long p1, long plc, long incr, long j)
 {
 	static __int64 mm7bak;
 	_asm
@@ -2558,7 +2558,7 @@ endh: pop edi
 	}
 }
 
-__declspec(noinline) void hrendz3dn (long sx, long sy, long p1, long plc, long incr, long j)
+void hrendz3dn (long sx, long sy, long p1, long plc, long incr, long j)
 {
 	_asm
 	{
@@ -2615,7 +2615,7 @@ beg:  pextrw eax, mm6, 1
 	}
 }
 
-__declspec(noinline) void hrendzfog3dn (long sx, long sy, long p1, long plc, long incr, long j)
+void hrendzfog3dn (long sx, long sy, long p1, long plc, long incr, long j)
 {
 	_asm
 	{
@@ -2686,7 +2686,7 @@ beg:  pextrw eax, mm6, 1
 	}
 }
 
-__declspec(noinline) void vrendzsse (long sx, long sy, long p1, long iplc, long iinc)
+void vrendzsse (long sx, long sy, long p1, long iplc, long iinc)
 {
 	_asm
 	{
@@ -2914,7 +2914,7 @@ endv: pop edi
 	}
 }
 
-__declspec(noinline) void vrendzfogsse (long sx, long sy, long p1, long iplc, long iinc)
+void vrendzfogsse (long sx, long sy, long p1, long iplc, long iinc)
 {
 	_asm
 	{
@@ -3250,7 +3250,7 @@ endv: pop edi
 	}
 }
 
-__declspec(noinline) void vrendz3dn (long sx, long sy, long p1, long iplc, long iinc)
+void vrendz3dn (long sx, long sy, long p1, long iplc, long iinc)
 {
 	_asm
 	{
@@ -3317,7 +3317,7 @@ endv: pop edi
 	}
 }
 
-__declspec(noinline) void vrendzfog3dn (long sx, long sy, long p1, long iplc, long iinc)
+void vrendzfog3dn (long sx, long sy, long p1, long iplc, long iinc)
 {
 	_asm
 	{
@@ -9082,7 +9082,7 @@ static _inline long dmulshr0 (long a, long d, long s, long t)
 
 #endif
 
-void equiind2vec (long i, float *x, float *y, float *z)
+__declspec(noinline) void equiind2vec (long i, float *x, float *y, float *z)
 {
 	float r;
 	(*z) = (float)i*equivec.zmulk + equivec.zaddk; r = sqrt(1.f - (*z)*(*z));
@@ -9856,7 +9856,7 @@ static _inline void maxps_3dn (point4d *sum, point4d *a, point4d *b)
 
 	//Code taken from renderboundcube of SLAB6D (Pentium III version :)
 #define MAXZSIZ 1024
-__declspec(noinline) static void kv6draw (vx5sprite *spr)
+static void kv6draw (vx5sprite *spr)
 {
 	point4d *r0, *r1, *r2;
 	kv6voxtype *xv, *yv, *v0, *v1;
@@ -11541,7 +11541,7 @@ void updatebbox (long x0, long y0, long z0, long x1, long y1, long z1, long csgd
 static long lightlst[MAXLIGHTS];
 static float lightsub[MAXLIGHTS];
 	//Re-calculates lighting byte #4 of all voxels inside bounding box
-__declspec(noinline) void updatelighting (long x0, long y0, long z0, long x1, long y1, long z1)
+void updatelighting (long x0, long y0, long z0, long x1, long y1, long z1)
 {
 	point3d tp;
 	float f, g, h, fx, fy, fz;
@@ -12126,7 +12126,7 @@ void finishfalls ()
 
 //----------------------------------------------------------------------------
 
-__declspec(noinline) void voxsetframebuffer (long p, long b, long x, long y)
+void voxsetframebuffer (long p, long b, long x, long y)
 {
 	long i;
 
