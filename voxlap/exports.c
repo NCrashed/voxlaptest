@@ -1,8 +1,9 @@
 #include "voxlap5.h"
 #include <math.h>
+#include <stdlib.h>
 
 DLLEXPORT long getVSID() { return VSID; }
-DLLEXPORT void setMaxScanDistToMax() { vx5.maxscandist = VSID*sqrt(2); }
+DLLEXPORT void setMaxScanDistToMax() { vx5.maxscandist = (long)(VSID*sqrt(2)); }
 DLLEXPORT void setMipUse(long amount) { vx5.vxlmipuse = amount; }
 
 DLLEXPORT void setRectOneColor(lpoint3d* hit1, lpoint3d* hit2, long ARGB)
@@ -90,4 +91,35 @@ DLLEXPORT long get_curcol() {
 
 DLLEXPORT long get_jitamount() {
 	return vx5.amount;
+}
+
+DLLEXPORT long add_light(float px, float py, float pz, float flash_radius, float intens) {
+	if (vx5.numlights >= MAXLIGHTS) {
+		return MAXLIGHTS-1;
+	}
+	lightsrctype *light = &vx5.lightsrc[vx5.numlights];
+	light->p.x = px; 
+	light->p.y = py; 
+	light->p.z = pz;
+	light->r2 = flash_radius * flash_radius;
+	light->sc = intens;
+	vx5.numlights += 1;
+	return vx5.numlights - 1;
+}
+
+DLLEXPORT long get_lights_count() {
+	return vx5.numlights;
+}
+
+DLLEXPORT void remove_light(long i) {
+	if (i >= vx5.numlights || i < 0) {
+		return;
+	}
+	if (vx5.numlights == 1) {
+		vx5.numlights = 0;
+	}
+	else {
+		vx5.lightsrc[0] = vx5.lightsrc[vx5.numlights - 1];
+		vx5.numlights -= 1;
+	}
 }

@@ -161,7 +161,7 @@ struct vx5
 } vx5;
 
 	//Initialization functions:
-DLLEXPORT DLLEXPORT extern long initvoxlap ();
+DLLEXPORT extern long initvoxlap ();
 DLLEXPORT extern void uninitvoxlap ();
 
 	//File related functions:
