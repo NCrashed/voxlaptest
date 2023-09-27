@@ -8067,6 +8067,84 @@ long project2d (float x, float y, float z, float *px, float *py, float *sx)
 	return(1);
 }
 
+typedef struct {
+	float det;
+	point3d r1;
+	point3d r2;
+	point3d r3;
+} inv_mat3;
+
+inv_mat3 inverse_view() {
+	inv_mat3 res;
+
+	res.det = gifor.x*gihei.y*gistr.z - gifor.x*gihei.z*gistr.y - gifor.y*gihei.x*gistr.z + gifor.y*gihei.z*gistr.x + gifor.z*gihei.x*gistr.y - gifor.z*gihei.y*gistr.x;
+	if (res.det == 0.0) {
+		return res;
+	}
+
+	res.r1.x = (gifor.y*gihei.z - gifor.z*gihei.y) / res.det;
+	res.r1.y = -(gifor.y*gistr.z - gifor.z*gistr.y) / res.det;
+	res.r1.z = (gihei.y*gistr.z - gihei.z*gistr.y) / res.det;
+
+	res.r2.x = -(gifor.x*gihei.z - gifor.z*gihei.x) / res.det;
+	res.r2.y = (gifor.x*gistr.z - gifor.z*gistr.x) / res.det;
+	res.r2.z = -(gihei.x*gistr.z - gihei.z*gistr.x) / res.det;
+
+	res.r3.x = (gifor.x*gihei.y - gifor.y*gihei.x) / res.det;
+	res.r3.y = -(gifor.x*gistr.y - gifor.y*gistr.x) / res.det;
+	res.r3.z = (gihei.x*gistr.y - gihei.y*gistr.x) / res.det;
+
+	return res;
+}
+
+dpoint3d unproject(float px, float py, float pz, inv_mat3 *view) {
+	dpoint3d v;
+
+	px = pz * (px - gihx) / gihz;
+	py = pz * (py - gihy) / gihz;
+
+	float ox = px * view->r1.x + py * view->r1.y + pz * view->r1.z;
+	float oy = px * view->r2.x + py * view->r2.y + pz * view->r2.z;
+	float oz = px * view->r3.x + py * view->r3.y + pz * view->r3.z;
+
+	v.x = ox + gipos.x;
+	v.y = oy + gipos.y;
+	v.z = oz + gipos.z;
+
+	return v;
+}
+
+// Projects back window space coordinates to ray. 
+ray3d unproject2d(float px, float py) {
+	ray3d ray;
+
+	// We need inverse of these matrix
+	// | gistr.x gistr.y gistr.z |
+	// | gihei.x gihei.y gihei.z |
+	// | gifor.x gifor.y gifor.z |
+	inv_mat3 view = inverse_view();
+	if (view.det == 0.0) {
+		ray.origin.x = gipos.x; ray.origin.y = gipos.y; ray.origin.y = gipos.y;
+		ray.direction.x = gifor.x; ray.direction.y = gifor.y; ray.direction.z = gifor.z;
+		return ray;
+	}
+	
+	dpoint3d v1 = unproject(px, py, 1.0f, &view);
+	dpoint3d v2 = unproject(px, py, 1.1f, &view);
+
+	ray.origin = v1;
+
+	ray.direction.x = v2.x - v1.x;
+	ray.direction.y = v2.y - v1.y;
+	ray.direction.z = v2.z - v1.z;
+	float len = 1 / (ray.direction.x * ray.direction.x + ray.direction.y * ray.direction.y + ray.direction.z * ray.direction.z);
+	ray.direction.x *= len;
+	ray.direction.y *= len;
+	ray.direction.z *= len;
+
+	return ray;
+}
+
 static __int64 mskp255 = 0x00ff00ff00ff00ff;
 static __int64 mskn255 = 0xff01ff01ff01ff01;
 static __int64 rgbmask64 = 0xffffff00ffffff;

@@ -99,6 +99,11 @@ typedef struct lightsrctype { point3d p; float r2, sc; } lightsrctype;
 	//Used by setspans/meltspans. Ordered this way to allow sorting as longs!
 typedef struct vspans { char z1, z0, x, y; } vspans;
 
+typedef struct {
+	dpoint3d origin;  // starting point of the ray
+	dpoint3d direction; // direction of the ray
+} ray3d;
+
 #pragma pack(pop)
 
 #define MAXFRM 1024 //MUST be even number for alignment!
@@ -185,6 +190,7 @@ DLLEXPORT extern void drawpoint3d (float, float, float, long);
 DLLEXPORT extern void drawline2d (float, float, float, float, long);
 DLLEXPORT extern void drawline3d (float, float, float, float, float, float, long);
 DLLEXPORT extern long project2d (float, float, float, float *, float *, float *);
+DLLEXPORT extern ray3d unproject2d(float, float);
 DLLEXPORT extern void drawspherefill (float, float, float, float, long);
 DLLEXPORT extern void drawpicinquad (long, long, long, long, long, long, long, long, float, float, float, float, float, float, float, float);
 DLLEXPORT extern void drawpolyquad (long, long, long, long, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float);
