@@ -9471,6 +9471,11 @@ void drawboundcubesse (kv6voxtype *, long);
 void drawboundcube3dninit ();
 void drawboundcube3dn (kv6voxtype *, long);
 
+void drawboundcubenozsseinit();
+void drawboundcubenozsse(kv6voxtype *, long);
+void drawboundcubenoz3dninit();
+void drawboundcubenoz3dn(kv6voxtype *, long);
+
 #ifdef __cplusplus
 }
 #endif
@@ -9932,6 +9937,16 @@ static _inline void maxps_3dn (point4d *sum, point4d *a, point4d *b)
 	for(;v0<=v1 && v1->z>inz;v1--) drawboundcube3dn(v1,const+0x10);\
 						  if (v0 == v1) drawboundcube3dn(v1,const+0x00);
 
+#define DRAWBOUNDCUBENOZLINE(const) \
+	for(;v0<=v1 && v0->z<inz;v0++) drawboundcubenozsse(v0,const+0x20);\
+	for(;v0<=v1 && v1->z>inz;v1--) drawboundcubenozsse(v1,const+0x10);\
+						  if (v0 == v1) drawboundcubenozsse(v1,const+0x00);
+
+#define DRAWBOUNDCUBENOZLINE_3DN(const) \
+	for(;v0<=v1 && v0->z<inz;v0++) drawboundcubenoz3dn(v0,const+0x20);\
+	for(;v0<=v1 && v1->z>inz;v1--) drawboundcubenoz3dn(v1,const+0x10);\
+						  if (v0 == v1) drawboundcubenoz3dn(v1,const+0x00);
+
 	//Code taken from renderboundcube of SLAB6D (Pentium III version :)
 #define MAXZSIZ 1024
 static void kv6draw (vx5sprite *spr)
@@ -10276,6 +10291,325 @@ static void kv6draw (vx5sprite *spr)
 			{
 				v0 = yv; yv += ylenptr[y]; v1 = yv-1;
 				DRAWBOUNDCUBELINE_3DN(0x0)
+			}
+		}
+	}
+	_asm emms
+}
+
+static void kv6draw_noz(vx5sprite *spr)
+{
+	point4d *r0, *r1, *r2;
+	kv6voxtype *xv, *yv, *v0, *v1;
+	kv6data *kv;
+	point3d ts, th, tf;
+	point3d npos, nstr, nhei, nfor, tp, tp2;
+	float f;
+	long x, y, z, inx, iny, inz, nxplanemin, nxplanemax;
+	unsigned short *ylenptr;
+
+	kv = spr->voxnum; if (!kv) return;
+
+	z = 0; //Quick & dirty estimation of distance
+	ftol((spr->p.x - gipos.x)*gifor.x + (spr->p.y - gipos.y)*gifor.y + (spr->p.z - gipos.z)*gifor.z, &y);
+	while ((kv->lowermip) && (y >= vx5.kv6mipfactor)) { kv = kv->lowermip; z++; y >>= 1; }
+	if (!z)
+	{
+		nxplanemin = vx5.xplanemin; nxplanemax = vx5.xplanemax;
+		ts = spr->s; th = spr->h; tf = spr->f;
+	}
+	else
+	{
+		nxplanemin = (vx5.xplanemin >> z);
+		nxplanemax = (vx5.xplanemax >> z); f = (float)(1 << z);
+		ts.x = spr->s.x*f; ts.y = spr->s.y*f; ts.z = spr->s.z*f;
+		th.x = spr->h.x*f; th.y = spr->h.y*f; th.z = spr->h.z*f;
+		tf.x = spr->f.x*f; tf.y = spr->f.y*f; tf.z = spr->f.z*f;
+	}
+
+	//View frustrum culling (72*,63+,12fabs,4cmp)
+	tp2.x = ((float)kv->xsiz)*.5; tp.x = tp2.x - kv->xpiv;
+	tp2.y = ((float)kv->ysiz)*.5; tp.y = tp2.y - kv->ypiv;
+	tp2.z = ((float)kv->zsiz)*.5; tp.z = tp2.z - kv->zpiv;
+	npos.x = tp.x*ts.x + tp.y*th.x + tp.z*tf.x + (spr->p.x - gipos.x);
+	npos.y = tp.x*ts.y + tp.y*th.y + tp.z*tf.y + (spr->p.y - gipos.y);
+	npos.z = tp.x*ts.z + tp.y*th.z + tp.z*tf.z + (spr->p.z - gipos.z);
+	nstr.x = ts.x*tp2.x; nstr.y = ts.y*tp2.x; nstr.z = ts.z*tp2.x;
+	nhei.x = th.x*tp2.y; nhei.y = th.y*tp2.y; nhei.z = th.z*tp2.y;
+	nfor.x = tf.x*tp2.z; nfor.y = tf.y*tp2.z; nfor.z = tf.z*tp2.z;
+	for (z = 3; z >= 0; z--) //72*,63+
+	{
+		//movaps xmm0, nx4      mulaps xmm0, ginor[0].x(dup 4)
+		//movaps xmm1, ny4      mulaps xmm1, ginor[0].y(dup 4)
+		//movaps xmm2, nz4      mulaps xmm2, ginor[0].z(dup 4)
+		//addps xmm0, xmm1      addps xmm0, xmm2
+		//andps xmm0, [0x7fffffff7fffffff7fffffffffffffff]
+		//movhlps xmm1, xmm0    addps xmm0, xmm1
+		//shufps xmm1, xmm0, 1  addss xmm0, xmm1
+		//ucomiss xmm0, [0x0]   jnz retfunc
+		if (fabs(nstr.x*ginor[z].x + nstr.y*ginor[z].y + nstr.z*ginor[z].z) +
+			fabs(nhei.x*ginor[z].x + nhei.y*ginor[z].y + nhei.z*ginor[z].z) +
+			fabs(nfor.x*ginor[z].x + nfor.y*ginor[z].y + nfor.z*ginor[z].z) +
+			npos.x*ginor[z].x + npos.y*ginor[z].y + npos.z*ginor[z].z < 0) return;
+	}
+	r0 = &ztab4[MAXZSIZ]; r1 = &ztab4[MAXZSIZ + 1]; r2 = &ztab4[MAXZSIZ + 2];
+
+	//Rotate sprite from world to screen coordinates:
+	mat2(&gixs, &giys, &gizs, &giadd, &ts, &th, &tf, &spr->p, &nstr, &nhei, &nfor, &npos);
+	npos.x -= (kv->xpiv*nstr.x + kv->ypiv*nhei.x + kv->zpiv*nfor.x);
+	npos.y -= (kv->xpiv*nstr.y + kv->ypiv*nhei.y + kv->zpiv*nfor.y);
+	npos.z -= (kv->xpiv*nstr.z + kv->ypiv*nhei.z + kv->zpiv*nfor.z);
+
+	//Find split point by using Cramer's rule
+	//Must use Cramer's rule for non-orthonormal input matrices
+	tp.x = nhei.y*nfor.z - nfor.y*nhei.z;
+	tp.y = nfor.y*nstr.z - nstr.y*nfor.z;
+	tp.z = nstr.y*nhei.z - nhei.y*nstr.z;
+	f = nstr.x*tp.x + nhei.x*tp.y + nfor.x*tp.z;
+	if (f != 0)
+	{
+		f = -1.0f / f;
+		tp2.x = npos.y*nfor.z - nfor.y*npos.z;
+		tp2.y = nhei.y*npos.z - npos.y*nhei.z;
+		tp2.z = npos.y*nstr.z - nstr.y*npos.z;
+		inx = (npos.x*tp.x - nhei.x*tp2.x - nfor.x*tp2.y)*f;
+		iny = (npos.x*tp.y + nstr.x*tp2.x - nfor.x*tp2.z)*f;
+		inz = (npos.x*tp.z + nstr.x*tp2.y + nhei.x*tp2.z)*f;
+	}
+	else { inx = iny = inz = -1; }
+	inx = lbound(inx, -1, kv->xsiz);
+	iny = lbound(iny, -1, kv->ysiz);
+	inz = lbound(inz, -1, kv->zsiz);
+
+	f = nhei.x; nhei.x = nfor.x; nfor.x = -f;
+	f = nhei.y; nhei.y = nfor.y; nfor.y = -f;
+	f = nhei.z; nhei.z = nfor.z; nfor.z = -f;
+
+	if (kv->zsiz >= MAXZSIZ) return; //HACK TO PREVENT CRASHES FOR NOW... FIX!
+	qsum0[2] = qsum0[0] = 0x7fff - (xres - (long)gihx);
+	qsum0[3] = qsum0[1] = 0x7fff - (yres - (long)gihy);
+
+	//r1->x = nstr.z; r1->y = nhei.z; r1->z = nfor.z;
+	//minps(r1,r1,&ztab4[0]); //&ztab4[0] always 0
+	//scisdist = -(r1->x + r1->y + r1->z);
+	scisdist = 0;
+	if (*(long *)&nstr.z < 0) scisdist -= nstr.z;
+	if (*(long *)&nhei.z < 0) scisdist -= nhei.z;
+	if (*(long *)&nfor.z < 0) scisdist -= nfor.z;
+
+	cadd4[1].x = nstr.x*gihz; cadd4[1].y = nstr.y*gihz; cadd4[1].z = cadd4[1].z2 = nstr.z;
+	cadd4[2].x = nhei.x*gihz; cadd4[2].y = nhei.y*gihz; cadd4[2].z = cadd4[2].z2 = nhei.z;
+	cadd4[4].x = nfor.x*gihz; cadd4[4].y = nfor.y*gihz; cadd4[4].z = cadd4[4].z2 = nfor.z;
+	r1->x = npos.x*gihz;      r1->y = npos.y*gihz;      r1->z = r1->z2 = npos.z;
+
+	updatereflects(spr);
+	//No more 8087 code after here!!! ----------------------------------------
+
+	if (cputype&(1 << 25))
+	{
+		addps(&cadd4[3], &cadd4[1], &cadd4[2]);
+		addps(&cadd4[5], &cadd4[1], &cadd4[4]);
+		addps(&cadd4[6], &cadd4[2], &cadd4[4]);
+		addps(&cadd4[7], &cadd4[3], &cadd4[4]);
+
+		for (z = 1; z<kv->zsiz; z++) addps(&ztab4[z], &ztab4[z - 1], &cadd4[2]);
+		intss(r2, -kv->ysiz); mulps(r2, r2, &cadd4[4]);
+
+		subps(r1, r1, &cadd4[4]); //ANNOYING HACK!!!
+
+		_asm
+		{
+			movq mm6, qsum0
+			movq mm7, qsum1
+		}
+
+		xv = kv->vox; ylenptr = kv->ylen;
+		for (x = 0; x<inx; x++, ylenptr += kv->ysiz)
+		{
+			if ((x < nxplanemin) || (x >= nxplanemax))
+			{
+				xv += kv->xlen[x]; addps(r1, r1, &cadd4[1]); continue;
+			}
+			yv = xv + kv->xlen[x]; movps(r0, r1);
+			for (y = 0; y<iny; y++)
+			{
+				v0 = xv; xv += ylenptr[y]; v1 = xv - 1;
+				DRAWBOUNDCUBENOZLINE(0xa)
+					subps(r0, r0, &cadd4[4]);
+			}
+			xv = yv;
+			addps(r0, r1, r2);
+			addps(r1, r1, &cadd4[1]);
+			for (y = kv->ysiz - 1; y>iny; y--)
+			{
+				addps(r0, r0, &cadd4[4]);
+				v1 = yv - 1; yv -= ylenptr[y]; v0 = yv;
+				DRAWBOUNDCUBENOZLINE(0x6)
+			}
+			if ((unsigned long)iny < (unsigned long)kv->ysiz)
+			{
+				addps(r0, r0, &cadd4[4]);
+				v1 = yv - 1; yv -= ylenptr[y]; v0 = yv;
+				DRAWBOUNDCUBENOZLINE(0x2)
+			}
+		}
+		xv = &kv->vox[kv->numvoxs]; ylenptr = &kv->ylen[(kv->xsiz - 1)*kv->ysiz];
+		intss(r0, kv->xsiz - x); mulps(r0, r0, &cadd4[1]); addps(r1, r1, r0);
+		for (x = kv->xsiz - 1; x>inx; x--, ylenptr -= kv->ysiz)
+		{
+			if ((x < nxplanemin) || (x >= nxplanemax))
+			{
+				xv -= kv->xlen[x]; subps(r1, r1, &cadd4[1]); continue;
+			}
+			yv = xv - kv->xlen[x];
+			subps(r1, r1, &cadd4[1]);
+			addps(r0, r1, r2);
+			for (y = kv->ysiz - 1; y>iny; y--)
+			{
+				addps(r0, r0, &cadd4[4]);
+				v1 = xv - 1; xv -= ylenptr[y]; v0 = xv;
+				DRAWBOUNDCUBENOZLINE(0x5)
+			}
+			xv = yv; movps(r0, r1);
+			for (y = 0; y<iny; y++)
+			{
+				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
+				DRAWBOUNDCUBENOZLINE(0x9)
+					subps(r0, r0, &cadd4[4]);
+			}
+			if ((unsigned long)iny < (unsigned long)kv->ysiz)
+			{
+				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
+				DRAWBOUNDCUBENOZLINE(0x1)
+			}
+		}
+		if ((unsigned long)inx < (unsigned long)kv->xsiz)
+		{
+			if ((x < nxplanemin) || (x >= nxplanemax)) { { _asm emms } return; }
+			yv = xv - kv->xlen[x];
+			subps(r1, r1, &cadd4[1]);
+			addps(r0, r1, r2);
+			for (y = kv->ysiz - 1; y>iny; y--)
+			{
+				addps(r0, r0, &cadd4[4]);
+				v1 = xv - 1; xv -= ylenptr[y]; v0 = xv;
+				DRAWBOUNDCUBENOZLINE(0x4)
+			}
+			xv = yv; movps(r0, r1);
+			for (y = 0; y<iny; y++)
+			{
+				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
+				DRAWBOUNDCUBENOZLINE(0x8)
+					subps(r0, r0, &cadd4[4]);
+			}
+			if ((unsigned long)iny < (unsigned long)kv->ysiz)
+			{
+				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
+				DRAWBOUNDCUBENOZLINE(0x0)
+			}
+		}
+	}
+	else
+	{
+		addps_3dn(&cadd4[3], &cadd4[1], &cadd4[2]);
+		addps_3dn(&cadd4[5], &cadd4[1], &cadd4[4]);
+		addps_3dn(&cadd4[6], &cadd4[2], &cadd4[4]);
+		addps_3dn(&cadd4[7], &cadd4[3], &cadd4[4]);
+
+		for (z = 1; z<kv->zsiz; z++) addps_3dn(&ztab4[z], &ztab4[z - 1], &cadd4[2]);
+		intss_3dn(r2, -kv->ysiz); mulps_3dn(r2, r2, &cadd4[4]);
+
+		subps_3dn(r1, r1, &cadd4[4]); //ANNOYING HACK!!!
+
+		_asm
+		{
+			movq mm6, qsum0
+			movq mm7, qsum1
+		}
+
+		xv = kv->vox; ylenptr = kv->ylen;
+		for (x = 0; x<inx; x++, ylenptr += kv->ysiz)
+		{
+			if ((x < nxplanemin) || (x >= nxplanemax))
+			{
+				xv += kv->xlen[x]; addps_3dn(r1, r1, &cadd4[1]); continue;
+			}
+			yv = xv + kv->xlen[x]; movps_3dn(r0, r1);
+			for (y = 0; y<iny; y++)
+			{
+				v0 = xv; xv += ylenptr[y]; v1 = xv - 1;
+				DRAWBOUNDCUBENOZLINE_3DN(0xa)
+					subps_3dn(r0, r0, &cadd4[4]);
+			}
+			xv = yv;
+			addps_3dn(r0, r1, r2);
+			addps_3dn(r1, r1, &cadd4[1]);
+			for (y = kv->ysiz - 1; y>iny; y--)
+			{
+				addps_3dn(r0, r0, &cadd4[4]);
+				v1 = yv - 1; yv -= ylenptr[y]; v0 = yv;
+				DRAWBOUNDCUBENOZLINE_3DN(0x6)
+			}
+			if ((unsigned long)iny < (unsigned long)kv->ysiz)
+			{
+				addps_3dn(r0, r0, &cadd4[4]);
+				v1 = yv - 1; yv -= ylenptr[y]; v0 = yv;
+				DRAWBOUNDCUBENOZLINE_3DN(0x2)
+			}
+		}
+		xv = &kv->vox[kv->numvoxs]; ylenptr = &kv->ylen[(kv->xsiz - 1)*kv->ysiz];
+		intss_3dn(r0, kv->xsiz - x); mulps_3dn(r0, r0, &cadd4[1]); addps_3dn(r1, r1, r0);
+		for (x = kv->xsiz - 1; x>inx; x--, ylenptr -= kv->ysiz)
+		{
+			if ((x < nxplanemin) || (x >= nxplanemax))
+			{
+				xv -= kv->xlen[x]; subps_3dn(r1, r1, &cadd4[1]); continue;
+			}
+			yv = xv - kv->xlen[x];
+			subps_3dn(r1, r1, &cadd4[1]);
+			addps_3dn(r0, r1, r2);
+			for (y = kv->ysiz - 1; y>iny; y--)
+			{
+				addps_3dn(r0, r0, &cadd4[4]);
+				v1 = xv - 1; xv -= ylenptr[y]; v0 = xv;
+				DRAWBOUNDCUBENOZLINE_3DN(0x5)
+			}
+			xv = yv; movps_3dn(r0, r1);
+			for (y = 0; y<iny; y++)
+			{
+				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
+				DRAWBOUNDCUBENOZLINE_3DN(0x9)
+					subps_3dn(r0, r0, &cadd4[4]);
+			}
+			if ((unsigned long)iny < (unsigned long)kv->ysiz)
+			{
+				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
+				DRAWBOUNDCUBENOZLINE_3DN(0x1)
+			}
+		}
+		if ((unsigned long)inx < (unsigned long)kv->xsiz)
+		{
+			if ((x < nxplanemin) || (x >= nxplanemax)) { { _asm emms } return; }
+			yv = xv - kv->xlen[x];
+			subps_3dn(r1, r1, &cadd4[1]);
+			addps_3dn(r0, r1, r2);
+			for (y = kv->ysiz - 1; y>iny; y--)
+			{
+				addps_3dn(r0, r0, &cadd4[4]);
+				v1 = xv - 1; xv -= ylenptr[y]; v0 = xv;
+				DRAWBOUNDCUBENOZLINE_3DN(0x4)
+			}
+			xv = yv; movps_3dn(r0, r1);
+			for (y = 0; y<iny; y++)
+			{
+				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
+				DRAWBOUNDCUBENOZLINE_3DN(0x8)
+					subps_3dn(r0, r0, &cadd4[4]);
+			}
+			if ((unsigned long)iny < (unsigned long)kv->ysiz)
+			{
+				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
+				DRAWBOUNDCUBENOZLINE_3DN(0x0)
 			}
 		}
 	}
@@ -10890,12 +11224,45 @@ static void kfadraw (vx5sprite *s)
 	}
 }
 
+static void kfadraw_noz(vx5sprite *s)
+{
+	point3d tp;
+	kfatype *kfa;
+	long i, j, k;
+
+	kfa = s->kfaptr; if (!kfa) return;
+
+	for (i = (kfa->numhin) - 1; i >= 0; i--)
+	{
+		j = kfa->hingesort[i]; k = kfa->hinge[j].parent;
+		if (k >= 0) setlimb(kfa, j, k, kfa->hinge[j].htype, vx5.kfaval[j]);
+		else
+		{
+			kfa->spr[j].s = s->s;
+			kfa->spr[j].h = s->h;
+			kfa->spr[j].f = s->f;
+			//kfa->spr[j].p = s->p;
+			tp.x = kfa->hinge[j].p[0].x;
+			tp.y = kfa->hinge[j].p[0].y;
+			tp.z = kfa->hinge[j].p[0].z;
+			kfa->spr[j].p.x = s->p.x - tp.x*s->s.x - tp.y*s->h.x - tp.z*s->f.x;
+			kfa->spr[j].p.y = s->p.y - tp.x*s->s.y - tp.y*s->h.y - tp.z*s->f.y;
+			kfa->spr[j].p.z = s->p.z - tp.x*s->s.z - tp.y*s->h.z - tp.z*s->f.z;
+		}
+		if (j < kfa->numspr) kv6draw_noz(&kfa->spr[j]);
+	}
+}
 //--------------------------- KFA sprite code ends ---------------------------
 
 void drawsprite (vx5sprite *spr)
 {
 	if (spr->flags&4) return;
-	if (!(spr->flags&2)) kv6draw(spr); else kfadraw(spr);
+	if (spr->flags & 8) {
+		if (!(spr->flags & 2)) kv6draw_noz(spr); else kfadraw_noz(spr);
+	}
+	else {
+		if (!(spr->flags & 2)) kv6draw(spr); else kfadraw(spr);
+	}
 }
 
 #if 0
@@ -12285,7 +12652,8 @@ fogend2:    emms
 		}
 	} else ofogdist = -1;
 
-	if (cputype&(1<<25)) drawboundcubesseinit(); else drawboundcube3dninit();
+	if (cputype&(1 << 25)) drawboundcubesseinit(); else drawboundcube3dninit();
+	if (cputype&(1 << 25)) drawboundcubenozsseinit(); else drawboundcubenoz3dninit();
 }
 
 //------------------------ Simple PNG OUT code begins ------------------------

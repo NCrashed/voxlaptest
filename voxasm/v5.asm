@@ -1124,6 +1124,299 @@ retboundcube_3dn:
 	pop ebx
 	ret
 
+;----------------------------------------------------------------------------
+
+PUBLIC _drawboundcubenozsseinit   ;Visual C entry point (pass by stack)
+_drawboundcubenozsseinit:
+	mov eax, _kv6frameplace
+	mov dword ptr [bcmod0noz-4], eax
+	mov eax, _kv6bytesperline
+	mov dword ptr [bcmod3noz-4], eax
+	ret       ;Visual C's _cdecl requires EBX,ESI,EDI,EBP to be preserved
+
+ALIGN 16
+PUBLIC _drawboundcubenozsse       ;Visual C entry point (pass by stack)
+_drawboundcubenozsse:
+	mov eax, [esp+4]
+	mov ecx, [esp+8]
+	push ebx   ;Visual C's _cdecl requires EBX,ESI,EDI,EBP to be preserved
+	push edi
+
+	movzx edi, byte ptr [eax+6]
+	and ecx, edi
+	jz retboundcubenoz
+
+	movaps xmm7, _ztabasm[MAXZSIZ*16]
+	movzx edi, word ptr [eax+4]
+	shl edi, 4
+	addps xmm7, _ztabasm[edi]
+	movhlps xmm0, xmm7
+	ucomiss xmm0, _scisdist
+	jc retboundcubenoz
+
+	lea ecx, _ptfaces16[ecx*8]
+
+	movzx ebx, byte ptr [ecx+1] ;                           ›
+	movzx edi, byte ptr [ecx+2] ;                           ›
+	movaps xmm0, _caddasm[ebx]  ;xmm0: [ z0, z0, y0, x0]    €
+	addps xmm0, xmm7            ;                           €€±
+	movaps xmm1, _caddasm[edi]  ;xmm1: [ z1, z1, y1, x1]    €
+	addps xmm1, xmm7            ;                           €€±
+	movaps xmm6, xmm0           ;xmm6: [ z0, z0, y0, x0]    €
+	movhlps xmm0, xmm1          ;xmm0: [ z0, z0, z1, z1]    €
+	movlhps xmm1, xmm6          ;xmm1: [ y0, x0, y1, x1]    €
+	rcpps xmm0, xmm0            ;xmm6: [/z0,/z0,/z1,/z1]    €€
+	mulps xmm0, xmm1            ;xmm0: [sy0,sx0,sy1,sx1]    €€±±
+
+	movzx ebx, byte ptr [ecx+3] ;                           ›
+	movzx edi, byte ptr [ecx+4] ;                           ›
+	movaps xmm2, _caddasm[ebx]  ;xmm2: [ z2, z2, y2, x2]    €
+	addps xmm2, xmm7            ;                           €€±
+	movaps xmm3, _caddasm[edi]  ;xmm3: [ z3, z3, y3, x3]    €
+	addps xmm3, xmm7            ;                           €€±
+	movaps xmm6, xmm2           ;xmm6: [ z2, z2, y2, x2]    €
+	movhlps xmm2, xmm3          ;xmm2: [ z2, z2, z3, z3]    €
+	movlhps xmm3, xmm6          ;xmm3: [ y2, x2, y3, x3]    €
+	rcpps xmm2, xmm2            ;xmm6: [/z2,/z2,/z3,/z3]    €€
+	mulps xmm2, xmm3            ;xmm2: [sy2,sx2,sy3,sx3]    €€±±
+
+	cvttps2pi mm0, xmm0         ;                           €
+	movhlps xmm0, xmm0          ;                           €
+	cvttps2pi mm2, xmm2         ;                           €
+	cvttps2pi mm1, xmm0         ;                           €
+	movhlps xmm2, xmm2          ;                           €
+	packssdw mm0, mm1           ;                           ›
+	movq mm1, mm0               ;                           ›
+	cvttps2pi mm3, xmm2         ;                           €
+	packssdw mm2, mm3           ;                           ›
+	pminsw mm0, mm2             ;                           ›
+	pmaxsw mm1, mm2             ;                           ›
+
+	cmp byte ptr [ecx], 4
+	je short bcskip6casenoz
+
+	movzx ebx, byte ptr [ecx+5] ;                           ›
+	movzx edi, byte ptr [ecx+6] ;                           ›
+	movaps xmm4, _caddasm[ebx]  ;xmm4: [ z4, z4, y4, x4]    €
+	addps xmm4, xmm7            ;                           €€±
+	movaps xmm5, _caddasm[edi]  ;xmm5: [ z5, z5, y5, x5]    €
+	addps xmm5, xmm7            ;                           €€±
+	movaps xmm6, xmm4           ;xmm6: [ z4, z4, y4, x4]    €
+	movhlps xmm4, xmm5          ;xmm4: [ z4, z4, z5, z5]    €
+	movlhps xmm5, xmm6          ;xmm5: [ y4, x4, y5, x5]    €
+	rcpps xmm4, xmm4            ;xmm6: [/z4,/z4,/z5,/z5]    €€
+	mulps xmm4, xmm5            ;xmm4: [sy4,sx4,sy5,sx5]    €€±±
+
+	cvttps2pi mm4, xmm4         ;                           €
+	movhlps xmm4, xmm4          ;                           €
+	cvttps2pi mm5, xmm4         ;                           €
+	packssdw mm4, mm5           ;                           ›
+	pminsw mm0, mm4             ; mm0: [my1,mx1,my0,mx0]    ›
+	pmaxsw mm1, mm4             ; mm1: [My1,Mx1,My0,Mx0]    ›
+bcskip6casenoz:
+
+	pshufw mm2, mm0, 0eh        ; mm2: [   ,   ,my1,mx1]    €
+	pshufw mm3, mm1, 0eh        ; mm3: [   ,   ,My1,Mx1]    €
+	pminsw mm0, mm2             ; mm0: [  ?,  ?, my, mx]    ›
+	pmaxsw mm1, mm3             ; mm1: [  ?,  ?, My, Mx]    ›
+	punpckldq mm0, mm1          ; mm0: [ My, Mx, my, mx]    ›
+
+		;See SCRCLP2D.BAS for a derivation of these 4 lines:
+	paddsw mm0, mm6 ;_qsum0     ; mm0: ["+?,"+?,"+?,"+?]    €
+	pmaxsw mm0, mm7 ;_qsum1     ; mm0: [sy1,sx1,sy0,sx0]    €
+	pshufw mm1, mm0, 0eeh       ; mm1: [sy1,sx1,sy1,sx1]    €
+	psubusw mm1, mm0            ; mm1: [  0,  0, dy, dx]    ›
+		;kv6frameplace -= ((32767-yres)*bpl + (32767-xres)*4);
+
+	movd edx, mm1               ; edx: [ dy, dx]            €
+	pmaddwd mm0, _qbplbpp       ; mm0: [      ?,   offs]    €±± (=y*bpl+x*bpp)
+	movd ebx, mm1               ; ebx: [ dy, dx]            ›
+	and edx, 0ffffh             ; ebx: [  0, dx]            ›
+	jz short retboundcubenoz    ;                           ›
+	sub ebx, 65536              ;                           ›
+	jc short retboundcubenoz    ;                           ›
+
+	movzx edi, byte ptr [eax+7]
+	punpcklbw mm5, [eax]
+	pmulhuw mm5, _kv6colmul[edi*8]
+	paddw mm5, _kv6coladd
+	packuswb mm5, mm5
+	movd edi, mm0               ; edi: offs
+
+	lea edi, [edi+edx*4+88888888h] ;_kv6frameplace
+bcmod0noz:
+	neg edx
+bcmod1noz:
+boundcubenoznextline:
+	mov ecx, edx
+begstosbnoz:
+	movd dword ptr [edi+ecx*4], mm5
+skipdrawpixnoz:
+	inc ecx
+	jnz begstosbnoz
+bcmod2noz:
+	add edi, 88888888h ;_kv6bytesperline
+bcmod3noz:
+
+	sub ebx, 65536
+	jnc short boundcubenoznextline
+
+retboundcubenoz:
+	pop edi    ;Visual C's _cdecl requires EBX,ESI,EDI,EBP to be preserved
+	pop ebx
+	ret
+
+PUBLIC _drawboundcubenoz3dninit   ;Visual C entry point (pass by stack)
+_drawboundcubenoz3dninit:
+	mov eax, _kv6frameplace
+	mov dword ptr [bcmod0noz_3dn-4], eax
+	mov eax, _kv6bytesperline
+	mov dword ptr [bcmod3noz_3dn-4], eax
+	ret       ;Visual C's _cdecl requires EBX,ESI,EDI,EBP to be preserved
+
+ALIGN 16
+PUBLIC _drawboundcubenoz3dn       ;Visual C entry point (pass by stack)
+_drawboundcubenoz3dn:
+	mov eax, [esp+4]
+	mov ecx, [esp+8]
+	push ebx   ;Visual C's _cdecl requires EBX,ESI,EDI,EBP to be preserved
+	push edi
+
+	movzx edi, byte ptr [eax+6]
+	and ecx, edi
+	jz retboundcubenoz_3dn
+
+	movq mm6, qword ptr _ztabasm[MAXZSIZ*16]
+	movq mm7, qword ptr _ztabasm[MAXZSIZ*16+8]
+	movzx edi, word ptr [eax+4]
+	shl edi, 4
+	pfadd mm6, qword ptr _ztabasm[edi]
+	pfadd mm7, qword ptr _ztabasm[edi+8]
+	movq mm0, mm7
+	pcmpgtd mm0, qword ptr _scisdist
+	movd edx, mm0
+	test edx, edx
+	jz retboundcubenoz_3dn
+
+	lea ecx, _ptfaces16[ecx*8]
+
+	movzx ebx, byte ptr [ecx+1]
+	movzx edi, byte ptr [ecx+2]
+	movq mm0, qword ptr _caddasm[ebx]
+	movq mm1, qword ptr _caddasm[edi]
+	pfadd mm0, mm6              ;mm0: [   y0    x0]
+	pfadd mm1, mm6              ;mm1: [   y1    x1]
+	movd mm5, _caddasm[ebx+8]
+	punpckldq mm5, _caddasm[edi+8]
+	pfadd mm5, mm7              ;mm5: [   z1    z0]
+	pfrcp mm4, mm5              ;mm4: [ 1/z0  1/z0]
+	punpckhdq mm5, mm5          ;mm5: [   z1    z1]
+	pfrcp mm5, mm5              ;mm5: [ 1/z1  1/z1]
+	pfmul mm0, mm4              ;mm0: [y0/z0 x0/z0]
+	pfmul mm1, mm5              ;mm1: [y1/z1 x1/z1]
+	pf2id mm0, mm0              ;mm0: [  sy0   sx0]
+	pf2id mm1, mm1              ;mm1: [  sy1   sx1]
+	packssdw mm0, mm1           ;mm0: [sy1 sx1 sy0 sx0]
+
+	movzx ebx, byte ptr [ecx+3]
+	movzx edi, byte ptr [ecx+4]
+	movq mm2, qword ptr _caddasm[ebx]
+	movq mm3, qword ptr _caddasm[edi]
+	pfadd mm2, mm6              ;mm2: [   y2    x2]
+	pfadd mm3, mm6              ;mm3: [   y3    x3]
+	movd mm5, _caddasm[ebx+8]
+	punpckldq mm5, _caddasm[edi+8]
+	pfadd mm5, mm7              ;mm5: [   z3    z2]
+	pfrcp mm4, mm5              ;mm4: [ 1/z2  1/z2]
+	punpckhdq mm5, mm5          ;mm5: [   z3    z3]
+	pfrcp mm5, mm5              ;mm5: [ 1/z3  1/z3]
+	pfmul mm2, mm4              ;mm2: [y2/z2 x2/z2]
+	pfmul mm3, mm5              ;mm3: [y3/z3 x3/z3]
+	pf2id mm2, mm2              ;mm2: [  sy2   sx2]
+	pf2id mm3, mm3              ;mm3: [  sy3   sx3]
+	packssdw mm2, mm3           ;mm2: [sy3 sx3 sy2 sx2]
+
+	movq mm1, mm0
+	pminsw mm0, mm2             ;mm0: [sy1 sx1 sy0 sx0] <-min
+	pmaxsw mm1, mm2             ;mm1: [sy1 sx1 sy0 sx0] <-max
+
+	cmp byte ptr [ecx], 4
+	je short bcskip6casenoz_3dn
+
+	movzx ebx, byte ptr [ecx+5]
+	movzx edi, byte ptr [ecx+6]
+	movq mm2, qword ptr _caddasm[ebx]
+	movq mm3, qword ptr _caddasm[edi]
+	pfadd mm2, mm6              ;mm2: [   y4    x4]
+	pfadd mm3, mm6              ;mm3: [   y5    x5]
+	movd mm5, _caddasm[ebx+8]
+	punpckldq mm5, _caddasm[edi+8]
+	pfadd mm5, mm7              ;mm5: [   z5    z4]
+	pfrcp mm4, mm5              ;mm4: [ 1/z4  1/z4]
+	punpckhdq mm5, mm5          ;mm5: [   z5    z5]
+	pfrcp mm5, mm5              ;mm5: [ 1/z5  1/z5]
+	pfmul mm2, mm4              ;mm2: [y4/z4 x4/z4]
+	pfmul mm3, mm5              ;mm3: [y5/z5 x5/z5]
+	pf2id mm2, mm2              ;mm2: [  sy4   sx4]
+	pf2id mm3, mm3              ;mm3: [  sy5   sx5]
+	packssdw mm2, mm3           ;mm2: [sy5 sx5 sy4 sx4]
+
+	pminsw mm0, mm2             ; mm0: [my1,mx1,my0,mx0]
+	pmaxsw mm1, mm2             ; mm1: [My1,Mx1,My0,Mx0]
+bcskip6casenoz_3dn:
+
+	pshufw mm2, mm0, 0eh        ; mm2: [my0,mx0,my1,mx1]
+	pshufw mm3, mm1, 0eh        ; mm3: [My0,Mx0,My1,Mx1]
+	pminsw mm0, mm2             ; mm0: [  ?,  ?, my, mx]
+	pmaxsw mm1, mm3             ; mm1: [  ?,  ?, My, Mx]
+	punpckldq mm0, mm1          ; mm0: [ My, Mx, my, mx]
+
+		;See SCRCLP2D.BAS for a derivation of these 4 lines:
+	paddsw mm0, _qsum0          ; mm0: ["+?,"+?,"+?,"+?]    €
+	pmaxsw mm0, _qsum1          ; mm0: [sy1,sx1,sy0,sx0]    €
+	pshufw mm1, mm0, 0eeh       ; mm1: [sy1,sx1,sy1,sx1]    €
+	psubusw mm1, mm0            ; mm1: [  0,  0, dy, dx]    ›
+		;kv6frameplace -= ((32767-yres)*bpl + (32767-xres)*4);
+
+	movd edx, mm1               ; edx: [ dy, dx]            €
+	pmaddwd mm0, _qbplbpp       ; mm0: [      ?,   offs]    €±± (=y*bpl+x*bpp)
+	movd ebx, mm1               ; ebx: [ dy, dx]            ›
+	and edx, 0ffffh             ; ebx: [  0, dx]            ›
+	jz short retboundcubenoz_3dn   ;                           ›
+	sub ebx, 65536              ;                           ›
+	jc short retboundcubenoz_3dn   ;                           ›
+
+	movzx edi, byte ptr [eax+7]
+	punpcklbw mm5, [eax]
+	pmulhuw mm5, _kv6colmul[edi*8]
+	paddw mm5, _kv6coladd
+	packuswb mm5, mm5
+	movd edi, mm0               ; edi: offs
+
+	lea edi, [edi+edx*4+88888888h] ;_kv6frameplace
+bcmod0noz_3dn:
+	neg edx
+	movd mm1, edx
+bcmod1noz_3dn:
+boundcubenextlinenoz_3dn:
+	movd ecx, mm1
+begstosbnoz_3dn:
+	movd dword ptr [edi+ecx*4], mm5
+skipdrawpixnoz_3dn:
+	inc ecx
+	jnz begstosb_3dn
+bcmod2noz_3dn:
+	add edi, 88888888h ;_kv6bytesperline
+bcmod3noz_3dn:
+
+	sub ebx, 65536
+	jnc short boundcubenextlinenoz_3dn
+
+retboundcubenoz_3dn:
+	pop edi    ;Visual C's _cdecl requires EBX,ESI,EDI,EBP to be preserved
+	pop ebx
+	ret
+
 _dep_protect_end:
 CODE ENDS
 END
