@@ -7,7 +7,7 @@
 
 #define USEZBUFFER 1
 
-#define PREC (256*2048)
+#define PREC (256*4096)
 #define CMPPREC (256*4096)
 #define FPREC (256*4096)
 #define USEV5ASM 1
@@ -27,7 +27,7 @@
 #define MAX_PATH 260
 #endif
 #include <stdlib.h>
-
+ 
 extern char keystatus[256];
 extern void readkeyboard ();
 extern void breath ();
