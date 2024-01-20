@@ -8,8 +8,8 @@
 #define USEZBUFFER 1
 
 #define PREC (256*2048)
-#define CMPPREC (256*2048)
-#define FPREC (256*2048)
+#define CMPPREC (256*4096)
+#define FPREC (256*4096)
 #define USEV5ASM 1
 #define SCISDIST 1.0
 #define GOLDRAT 0.3819660112501052 //Golden Ratio: 1 - 1/((sqrt(5)+1)/2)
