@@ -33,6 +33,24 @@ The engine's host contract is already minimal: `voxsetframebuffer(xres, yres, pi
 6. **Build system** — VS2010 `.sln` with v140 toolset, Windows SDK 8.1, `/QIfist` (deprecated), post-build `install.bat` that isn't in the repo.
 7. **Case-sensitive filename risk** on Linux/macOS for `.vxl`, `.kv6`, `.kfa` assets.
 
+## Progress (as of 2026-04-24)
+
+| Stage | Status |
+|---|---|
+| 0 — Baseline & CI | ✅ Complete. Oracle renders 7 fixed poses (4 terrain + 3 sprite) and diffs against frozen goldens on every CI run. |
+| 1 — CMake + `VOXLAP_API` + VS artifact deletion | ✅ Complete. CMake is the sole build system; `.sln`/`.vcxproj`/`install.bat` are deleted. |
+| 2 — 64-bit-clean the C | ✅ Complete, hash-neutral on MSVC x86. `long`→`int32_t`, `__int64`→`int64_t`, pointer casts flipped to `intptr_t`, structs audited (no blob-serialisation → 64-bit pointer widening is safe), `MAX_PATH` internalised, `setMaxScanDistToMax` VSID=2048 bug clamped. Variable declarations holding pointer values (`frameplace`, `gpixy`, etc.) are still `int32_t` — deferred because they feed the Stage-4-doomed inline asm. |
+| 3 — Replace MSVC inline asm | ◑ Enumerated categories done (see table below). The remaining inline asm in voxlap5.c is MMX/SSE rasterization and 3DNow point4d helpers — these share registers and lookup tables with `v5.asm` and are rewritten as one piece in Stage 4. |
+| 4 — Replace `v5.asm` + MMX inline asm | ⏭ Not started. Natural scope: the ~17 `_asm emms` flushes, ~60 inline `_asm { }` blocks in voxlap5.c, the entire MASM `v5.asm`, and the supporting MSVC-gated helpers (`expandbit256`, `mmxcoloradd`, `mmxcolorsub`). |
+| 5 — Rust bindings | ⏭ Not started. |
+| 6 — Polish | ⏭ Not started. |
+
+**Oracle coverage.** 7 frozen hashes on MSVC x86, captured in `tests/oracle/golden-hashes.txt`:
+- 4 terrain poses exercising opticast's raycaster, the fog path, and the voxel colorfunc dispatch.
+- 3 sprite poses exercising `drawsprite` → `drawboundcube_sse` (the SSE sprite rasterizer v5.asm exposes). Sprite is built procedurally via `meltsphere` from a hidden multi-coloured block inside the surrounding solid mass, so no file I/O and no Linux-CI pre-flight.
+
+**Non-Windows CI status.** Linux and macOS build continues to be red, but progressed from "header cascade" through "implicit declarations" and now halts at the Stage 4 boundary: bare `_asm emms` / `_asm { }` statements and MMX-only static helpers. The kplib.c `_asm` blocks (Paeth686, rgbhlineasm, pal8hlineasm, mulshr24/32, bitrev, testflag) all sit behind `#ifdef _MSC_VER && !NOASM` with portable-C `#else` fallbacks — non-MSVC compilers take the portable path there, so kplib.c is not a port blocker.
+
 ## Staged port
 
 Each stage is independently shippable and testable. The DLL's C ABI stays stable across all stages so the Rust bindings built in Stage 5 keep working as the internals change.
@@ -63,18 +81,21 @@ Refactor-only stage. 32-bit MSVC still builds. Screenshots must match the oracle
 
 ### Stage 3 — Replace MSVC inline asm with portable C/intrinsics (2 weeks)
 
-Walk the 45 `_asm` blocks in `voxlap5.c`. Most are trivial in modern C:
+Walk the `_asm` blocks in `voxlap5.c`. Most are trivial in modern C:
 
-| Current asm | Replacement |
-|---|---|
-| `cossin` / `dcossin` (x87 `fsincos`) | `sinf`/`cosf`; optionally `sincosf` on GCC/Clang |
-| `mul64` / `shldiv16` / `isshldiv16safe` | Plain C with `int64_t`. Asm only existed because 1990s MSVC codegen was poor. |
-| `bswap` | `__builtin_bswap32` (GCC/Clang), `_byteswap_ulong` (MSVC) |
-| CPUID | `<cpuid.h>` (GCC/Clang) or `__cpuid` intrinsic (MSVC) — only needed for debug info; not for dispatch anymore |
-| FPU-stack `fld`/`fstp` tricks | Plain C math |
-| `v5_asm_dep_unlock` (VirtualProtect dance) | **Delete.** The new asm will live in `.text` like any other function. |
+| Current asm | Replacement | Status |
+|---|---|---|
+| `cossin` / `dcossin` (x87 `fsincos`) | `sinf`/`cosf` | ✅ Stage 3.3 |
+| `mul64` / `shldiv16` / `isshldiv16safe` / `mulshr16` / `umulshr32` / `scale` / `dmulrethigh` / `copybuf` / `clearbuf` | Plain C with `int64_t` | ✅ Stage 3.1 |
+| `bswap` | `_byteswap_ulong` on MSVC. `__builtin_bswap32` on GCC/Clang still TODO. | ◑ Stage 3.4 (MSVC only) |
+| CPUID | `__cpuid` on MSVC. `<cpuid.h>` on GCC/Clang still TODO. | ◑ Stage 3.4 (MSVC only) |
+| `ftol` / `dtol` / `dbound` (FPU-stack tricks) | `lrintf`/`lrint` + ternary | ✅ Stage 3.2 |
+| `bitrev` / `testflag` (kplib.c) | Portable C loop / hardcoded `return 1` | ✅ Stage 3.5 |
+| `v5_asm_dep_unlock` (VirtualProtect dance) | **Delete** — deferred to Stage 4, bundled with `v5.asm` rewrite |
 
-Verification: diff against the Stage 0 oracle after each block replacement.
+Verification (done): Stage 0 oracle goldens unchanged on MSVC x86 through every Stage 3 commit.
+
+Outside Stage 3's intent but uncovered during it: the remaining inline asm in voxlap5.c is MMX/SSE rasterization (~60 blocks, ~17 `_asm emms`) plus the 3DNow point4d helpers at `voxlap5.c:9741+`. These are intertwined with `v5.asm`'s entry points and are rewritten in Stage 4.
 
 ### Stage 4 — Replace `v5.asm` with portable SSE2 intrinsics + scalar fallback (3–4 weeks)
 
