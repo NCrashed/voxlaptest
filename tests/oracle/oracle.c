@@ -126,11 +126,19 @@ struct pose {
 };
 
 int main(void) {
+	/* Camera positions use small irrational-ish offsets on each axis so
+	 * no ray from the camera to an integer voxel corner lands at a
+	 * simple rational slope p/q. Voxlap's DDA raycaster has tie-breaking
+	 * issues at rational slopes (dx/dy = 1/4, 1/5, 1/6, ...) where a
+	 * ray exactly hits a voxel corner — those rays "slip through" the
+	 * grid and render as vertical black columns at fixed ray angles.
+	 * Offsetting the camera by e.g. 0.37 on each axis breaks the
+	 * rational alignment for every ray cast from this pose. */
 	static const struct pose poses[] = {
-		{"north",     1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0},
-		{"east",      1024.0, 1024.0, 128.0, 0.0,                0.0},
-		{"diag_down", 1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4},
-		{"high_down", 1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7},
+		{"north",     1024.37, 1024.37, 128.37, 1.5707963267948966, 0.0},
+		{"east",      1024.37, 1024.37, 128.37, 0.0,                0.0},
+		{"diag_down", 1000.37, 1000.37, 110.37, 0.7853981633974483, 0.4},
+		{"high_down", 1024.37, 1024.37,  90.37, 1.5707963267948966, 0.7},
 	};
 	const size_t N = sizeof(poses) / sizeof(poses[0]);
 	size_t i;
