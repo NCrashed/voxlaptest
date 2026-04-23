@@ -41,7 +41,7 @@ jobs:
         # /MT matches voxlap.dll's RuntimeLibrary=MultiThreaded (static CRT).
         # /J matches the DLL's unsigned-char default so char compares agree.
         run: >
-          cl /nologo /O2 /MT /J /W3 /I voxlap
+          cl /nologo /O2 /MT /J /W3 /D_CRT_SECURE_NO_WARNINGS /I voxlap
           /Fe:tests\oracle\oracle.exe
           /Fo:tests\oracle\oracle.obj
           tests\oracle\oracle.c

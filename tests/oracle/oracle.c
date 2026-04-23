@@ -13,9 +13,13 @@
  *   - as a regression detector during Stage 2/3 refactors (MSVC vs MSVC),
  *   - and for visual PNG comparison across platforms from Stage 4 onward.
  *
- * Note: this file casts the framebuffer pointer through (long), which is
- * only correct on Win32 x86 (pointer == long == 4 bytes). Stage 2 of the
- * port widens voxsetframebuffer() to take a real pointer.
+ * The oracle touches the engine only through exported symbols (declared in
+ * voxlap5.h and wrapped in exports.c) — it never dereferences the `vx5`
+ * global, which is not exported from voxlap.dll. That keeps this harness
+ * free of any engine modifications.
+ *
+ * Note: voxsetframebuffer's first arg is typed `long`, which on Win32 x86
+ * is the same width as a pointer but NOT on x64. Stage 2 widens this API.
  */
 
 #include "voxlap5.h"
@@ -25,6 +29,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Wrappers declared in exports.c (not in voxlap5.h). Re-declare here so the
+ * oracle doesn't need a second header. Linkage matches the DLLEXPORTed defs. */
+extern void setRectOneColor(lpoint3d *hit1, lpoint3d *hit2, long ARGB);
+extern void set_curcol(long v);
+extern void set_jitamount(long v);
+extern void set_colfunc(long (*v)(lpoint3d *));
 
 enum { XRES = 640, YRES = 480, BYTESPERLINE = XRES * 4 };
 
@@ -44,36 +55,34 @@ static void build_scene(void) {
 
 	loadnul(&ipo, &ist, &ihe, &ifo);
 
-	/* Pin the color function to curcolfunc so our own setrect/setsphere
-	 * calls place exactly vx5.curcol with no jitter. (The chamber walls
-	 * placed inside loadnul still carry their jittered colors, but those
-	 * are deterministic since the engine's internal LCG state is zero
-	 * at program start.) */
-	vx5.colfunc = curcolfunc;
-	vx5.amount = 0;
+	/* Disable color jitter so the shapes we place below carry the exact
+	 * ARGB values we specify. The chamber walls placed inside loadnul were
+	 * already written with jitter, but that writes happen before gkrand is
+	 * touched again, so they remain bit-deterministic across runs. */
+	set_colfunc(curcolfunc);
+	set_jitamount(0);
 
 	/* Red pillar against the north interior wall */
-	vx5.curcol = 0x00ff2020;
 	a.x = 1010; a.y = 1100; a.z = 100;
 	b.x = 1020; b.y = 1110; b.z = 170;
-	setrect(&a, &b, -1);
+	setRectOneColor(&a, &b, 0x00ff2020);
 
 	/* Green cube in front of map center */
-	vx5.curcol = 0x0020c020;
 	a.x = 1030; a.y = 1060; a.z = 150;
 	b.x = 1040; b.y = 1070; b.z = 160;
-	setrect(&a, &b, -1);
+	setRectOneColor(&a, &b, 0x0020c020);
 
 	/* Blue floor tile */
-	vx5.curcol = 0x002050ff;
 	a.x = 1000; a.y = 1040; a.z = 169;
 	b.x = 1050; b.y = 1080; b.z = 172;
-	setrect(&a, &b, -1);
+	setRectOneColor(&a, &b, 0x002050ff);
 
-	/* Yellow sphere on the floor */
-	vx5.curcol = 0x00ffd040;
+	/* Yellow sphere on the floor. setsphere reads its color from
+	 * vx5.curcol via vx5.colfunc (= curcolfunc, set above), so we set
+	 * curcol directly via the exported setter. */
+	set_curcol(0x00ffd040);
 	c.x = 1060; c.y = 1020; c.z = 160;
-	setsphere(&c, 8, -1);
+	setsphere(&c, 8, 0);
 
 	updatevxl();
 }
