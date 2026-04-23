@@ -240,41 +240,21 @@ static _inline void dcossin (double a, double *c, double *s)
 
 static _inline void ftol (float f, int32_t *a)
 {
-	_asm
-	{
-		mov eax, a
-		fld f
-		fistp dword ptr [eax]
-	}
+	/* lrintf honours the current rounding mode; default is
+	 * round-to-nearest-even, matching the x87 fistp the asm used. */
+	*a = (int32_t)lrintf(f);
 }
 
 static _inline void dtol (double d, int32_t *a)
 {
-	_asm
-	{
-		mov eax, a
-		fld qword ptr d
-		fistp dword ptr [eax]
-	}
+	*a = (int32_t)lrint(d);
 }
 
-	//WARNING: This ASM code requires >= PPRO
 static _inline double dbound (double d, double dmin, double dmax)
 {
-	_asm
-	{
-		fld dmin
-		fld d
-		fucomi st, st(1)   ;if (d < dmin)
-		fcmovb st, st(1)   ;    d = dmin;
-		fld dmax
-		fxch st(1)
-		fucomi st, st(1)   ;if (d > dmax)
-		fcmovnb st, st(1)  ;    d = dmax;
-		fstp d
-		fucompp
-	}
-	return(d);
+	/* Bit-identical to the fucomi/fcmov asm for finite ordered inputs;
+	 * diverges only for NaN, which voxlap never produces. */
+	return d < dmin ? dmin : d > dmax ? dmax : d;
 }
 
 static _inline int32_t mulshr16 (int32_t a, int32_t d)
