@@ -29,6 +29,20 @@
 /* Engine-internal path-length constant. Deliberately not MAX_PATH: we
  * don't want a name collision with windows.h nor a dependency on it. */
 #define VOXLAP_MAX_PATH 260
+
+/* Cross-compiler shims. MSVC uses `_inline` (underscore-prefixed); GCC
+ * and Clang only accept the C99 `inline`. Both MSVC's <stdlib.h> and
+ * <windows.h> define max/min as macros; non-MSVC standard headers do
+ * not. kplib.c already carries the same pair of macros. */
+#ifndef _MSC_VER
+#define _inline inline
+#endif
+#if !defined(max)
+#define max(a,b) ((a) > (b) ? (a) : (b))
+#endif
+#if !defined(min)
+#define min(a,b) ((a) < (b) ? (a) : (b))
+#endif
  
 extern char keystatus[256];
 extern void readkeyboard ();
