@@ -93,7 +93,7 @@ char tbuf[MAXCSIZ];
 int32_t tbuf2[MAXZDIM*3];
 int32_t templongbuf[MAXZDIM];
 
-int32_t cputype = 0; //bit25=1: SSE, bits30&31=1,1:3DNow!+
+int32_t cputype = 0; //bit25=1: SSE (runtime dispatch removed, kept for diagnostics)
 
 static char nullst = 0; //nullst always NULL string
 
@@ -2512,134 +2512,6 @@ endh: pop edi
 	}
 }
 
-void hrendz3dn (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr, int32_t j)
-{
-	_asm
-	{
-		push esi
-		push edi
-		mov eax, sy
-		mov eax, ylookup[eax*4]
-		add eax, frameplace
-		mov esi, p1
-		lea esi, [eax+esi*4]    ;esi = p1
-		mov edi, sx
-		lea edi, [eax+edi*4]    ;edi = p0
-
-		movd mm0, sx
-		punpckldq mm0, sy
-		pi2fd mm0, mm0          ;mm0: (float)sy (float)sx
-		pshufw mm2, mm0, 0xee   ;mm2: (float)sy (float)sy
-		punpckldq mm0, mm0      ;mm0: (float)sx (float)sx
-		movd mm1, optistrx
-		punpckldq mm1, optistry
-		pfmul mm0, mm1          ;mm0: (float)sx*optistry (float)sx*optistrx
-		movd mm3, optiheix
-		punpckldq mm3, optiheiy
-		pfmul mm2, mm3          ;mm2: (float)sy*optiheiy (float)sy*optiheix
-		pfadd mm0, mm2
-		movd mm3, optiaddx
-		punpckldq mm3, optiaddy ;mm3: optiaddy optiaddx
-		pfadd mm0, mm3          ;mm0: diry diry
-
-		movd mm6, plc
-		movd mm7, incr
-		mov ecx, zbufoff
-		mov edx, j
-
-beg:  pextrw eax, mm6, 1
-		mov eax, angstart[eax*4]
-		movq mm2, [eax+edx*8]   ;mm2:      dist       col
-		pshufw mm3, mm2, 0xee   ;mm3:         ?      dist
-		pi2fd mm3, mm3          ;mm3:         ?   (f)dist
-		movq mm4, mm0           ;mm4:      diry      dirx
-		pfmul mm4, mm4          ;mm4:    diry^2    dirx^2
-		pfadd mm0, mm1          ;mm0: dirx+optx diry+opty (unrelated)
-		pfacc mm4, mm4          ;mm4: (x^2+y^2)   x^2+y^2
-		pfrsqrt mm4, mm4        ;mm4: 1/sqrt(*) 1/sqrt(*)
-		pfmul mm3, mm4          ;mm3:         0    zvalue
-		paddd mm6, mm7          ;mm6:            plc+incr (unrelated)
-		movd [edi], mm2
-		movd [edi+ecx], mm3
-		add edi, 4
-		cmp edi, esi
-		jb short beg
-		pop edi
-		pop esi
-	}
-}
-
-void hrendzfog3dn (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr, int32_t j)
-{
-	_asm
-	{
-		push esi
-		push edi
-		mov eax, sy
-		mov eax, ylookup[eax*4]
-		add eax, frameplace
-		mov esi, p1
-		lea esi, [eax+esi*4]    ;esi = p1
-		mov edi, sx
-		lea edi, [eax+edi*4]    ;edi = p0
-
-		movd mm0, sx
-		punpckldq mm0, sy
-		pi2fd mm0, mm0          ;mm0: (float)sy (float)sx
-		pshufw mm2, mm0, 0xee   ;mm2: (float)sy (float)sy
-		punpckldq mm0, mm0      ;mm0: (float)sx (float)sx
-		movd mm1, optistrx
-		punpckldq mm1, optistry
-		pfmul mm0, mm1          ;mm0: (float)sx*optistry (float)sx*optistrx
-		movd mm3, optiheix
-		punpckldq mm3, optiheiy
-		pfmul mm2, mm3          ;mm2: (float)sy*optiheiy (float)sy*optiheix
-		pfadd mm0, mm2
-		movd mm3, optiaddx
-		punpckldq mm3, optiaddy ;mm3: optiaddy optiaddx
-		pfadd mm0, mm3          ;mm0: diry diry
-
-		pxor mm5, mm5
-
-		movd mm6, plc
-		movd mm7, incr
-		mov ecx, zbufoff
-		mov edx, j
-
-beg:  pextrw eax, mm6, 1
-		mov eax, angstart[eax*4]
-		movq mm2, [eax+edx*8]   ;mm2:      dist       col
-		pshufw mm3, mm2, 0xee   ;mm3:         ?      dist
-		pi2fd mm3, mm3          ;mm3:         ?   (f)dist
-		movq mm4, mm0           ;mm4:      diry      dirx
-		pfmul mm4, mm4          ;mm4:    diry^2    dirx^2
-		pfadd mm0, mm1          ;mm0: dirx+optx diry+opty (unrelated)
-		pfacc mm4, mm4          ;mm4: (x^2+y^2)   x^2+y^2
-		pfrsqrt mm4, mm4        ;mm4: 1/sqrt(*) 1/sqrt(*)
-		pfmul mm3, mm4          ;mm3:         0    zvalue
-		paddd mm6, mm7          ;mm6:            plc+incr (unrelated)
-
-			;Extra calculations for fog
-		pextrw eax, mm2, 3
-		punpcklbw mm2, mm5
-		movq mm4, fogcol
-		psubw mm4, mm2
-		paddw mm4, mm4
-		shr eax, 4
-		pmulhw mm4, foglut[eax*8]
-		paddw mm2, mm4
-		packuswb mm2, mm4
-
-		movd [edi], mm2
-		movd [edi+ecx], mm3
-		add edi, 4
-		cmp edi, esi
-		jb short beg
-		pop edi
-		pop esi
-	}
-}
-
 void vrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
 {
 	_asm
@@ -3204,154 +3076,6 @@ endv: pop edi
 	}
 }
 
-void vrendz3dn (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
-{
-	_asm
-	{
-		push ebx
-		push esi
-		push edi
-		mov esi, p1
-		mov edi, sx
-		cmp edi, esi
-		jae short endv
-		mov eax, sy
-		mov eax, ylookup[eax*4]
-		add eax, frameplace
-		lea esi, [eax+esi*4]    ;esi = p1
-		lea edi, [eax+edi*4]    ;edi = p0
-
-		movd mm0, sx
-		punpckldq mm0, sy
-		pi2fd mm0, mm0          ;mm0: (float)sy (float)sx
-		pshufw mm2, mm0, 0xee   ;mm2: (float)sy (float)sy
-		punpckldq mm0, mm0      ;mm0: (float)sx (float)sx
-		movd mm1, optistrx
-		punpckldq mm1, optistry
-		pfmul mm0, mm1          ;mm0: (float)sx*optistry (float)sx*optistrx
-		movd mm3, optiheix
-		punpckldq mm3, optiheiy
-		pfmul mm2, mm3          ;mm2: (float)sy*optiheiy (float)sy*optiheix
-		pfadd mm0, mm2
-		movd mm3, optiaddx
-		punpckldq mm3, optiaddy ;mm3: optiaddy optiaddx
-		pfadd mm0, mm3          ;mm0: diry diry
-
-		mov ecx, zbufoff
-		mov edx, iplc
-		mov ebx, sx
-		mov eax, uurend
-		lea ebx, [eax+ebx*4]
-
-begv_3dn:
-		movd mm5, [ebx]
-		pextrw eax, mm5, 1
-		paddd mm5, [ebx+MAXXDIM*4]
-		movd [ebx], mm5
-		mov eax, angstart[eax*4]
-		movq mm2, [eax+edx*8]   ;mm2:      dist       col
-		pshufw mm3, mm2, 0xee   ;mm3:         ?      dist
-		pi2fd mm3, mm3          ;mm3:         ?   (f)dist
-		movq mm4, mm0           ;mm4:      diry      dirx
-		pfmul mm4, mm4          ;mm4:    diry^2    dirx^2
-		pfadd mm0, mm1          ;mm0: dirx+optx diry+opty (unrelated)
-		pfacc mm4, mm4          ;mm4: (x^2+y^2)   x^2+y^2
-		pfrsqrt mm4, mm4        ;mm4: 1/sqrt(*) 1/sqrt(*)
-		pfmul mm3, mm4          ;mm3:         0    zvalue
-		movd [edi], mm2
-		movd [edi+ecx], mm3
-		add edx, iinc
-		add ebx, 4
-		add edi, 4
-		cmp edi, esi
-		jb short begv_3dn
-endv: pop edi
-		pop esi
-		pop ebx
-	}
-}
-
-void vrendzfog3dn (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
-{
-	_asm
-	{
-		push ebx
-		push esi
-		push edi
-		mov esi, p1
-		mov edi, sx
-		cmp edi, esi
-		jae short endv
-		mov eax, sy
-		mov eax, ylookup[eax*4]
-		add eax, frameplace
-		lea esi, [eax+esi*4]    ;esi = p1
-		lea edi, [eax+edi*4]    ;edi = p0
-
-		movd mm0, sx
-		punpckldq mm0, sy
-		pi2fd mm0, mm0          ;mm0: (float)sy (float)sx
-		pshufw mm2, mm0, 0xee   ;mm2: (float)sy (float)sy
-		punpckldq mm0, mm0      ;mm0: (float)sx (float)sx
-		movd mm1, optistrx
-		punpckldq mm1, optistry
-		pfmul mm0, mm1          ;mm0: (float)sx*optistry (float)sx*optistrx
-		movd mm3, optiheix
-		punpckldq mm3, optiheiy
-		pfmul mm2, mm3          ;mm2: (float)sy*optiheiy (float)sy*optiheix
-		pfadd mm0, mm2
-		movd mm3, optiaddx
-		punpckldq mm3, optiaddy ;mm3: optiaddy optiaddx
-		pfadd mm0, mm3          ;mm0: diry diry
-
-		pxor mm6, mm6
-
-		mov ecx, zbufoff
-		mov edx, iplc
-		mov ebx, sx
-		mov eax, uurend
-		lea ebx, [eax+ebx*4]
-
-begv_3dn:
-		movd mm5, [ebx]
-		pextrw eax, mm5, 1
-		paddd mm5, [ebx+MAXXDIM*4]
-		movd [ebx], mm5
-		mov eax, angstart[eax*4]
-		movq mm2, [eax+edx*8]   ;mm2:      dist       col
-		pshufw mm3, mm2, 0xee   ;mm3:         ?      dist
-		pi2fd mm3, mm3          ;mm3:         ?   (f)dist
-		movq mm4, mm0           ;mm4:      diry      dirx
-		pfmul mm4, mm4          ;mm4:    diry^2    dirx^2
-		pfadd mm0, mm1          ;mm0: dirx+optx diry+opty (unrelated)
-		pfacc mm4, mm4          ;mm4: (x^2+y^2)   x^2+y^2
-		pfrsqrt mm4, mm4        ;mm4: 1/sqrt(*) 1/sqrt(*)
-		pfmul mm3, mm4          ;mm3:         0    zvalue
-
-			;Extra calculations for fog
-		pextrw eax, mm2, 3
-		punpcklbw mm2, mm6
-		movq mm4, fogcol
-		psubw mm4, mm2
-		paddw mm4, mm4
-		shr eax, 4
-		pmulhw mm4, foglut[eax*8]
-		paddw mm2, mm4
-		packuswb mm2, mm4
-
-		movd [edi], mm2
-		movd [edi+ecx], mm3
-		add edx, iinc
-		add ebx, 4
-		add edi, 4
-		cmp edi, esi
-		jb short begv_3dn
-endv: pop edi
-		pop esi
-		pop ebx
-	}
-}
-
 #endif
 
 void setcamera (dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe, dpoint3d *ifo,
@@ -3420,17 +3144,8 @@ void opticast ()
 #if (USEZBUFFER != 1)
 	hrend = hrendnoz; vrend = vrendnoz;
 #else
-	if (ofogdist < 0)
-	{
-		if (cputype&(1<<25)) { hrend = hrendzsse; vrend = vrendzsse; }
-							 else { hrend = hrendz3dn; vrend = vrendz3dn; }
-	}
-	else
-	{
-		if (cputype&(1<<25)) { hrend = hrendzfogsse; vrend = vrendzfogsse; }
-							 else { hrend = hrendzfog3dn; vrend = vrendzfog3dn; }
-
-	}
+	if (ofogdist < 0) { hrend = hrendzsse; vrend = vrendzsse; }
+	else { hrend = hrendzfogsse; vrend = vrendzfogsse; }
 #endif
 	if (ofogdist < 0) nskypic = skypic;
 				  else { nskypic = skyoff = 0; } //Optimization hack: draw sky as pure black when using fog
@@ -8646,7 +8361,6 @@ void drawpicinquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 
 __declspec(align(16)) static float dpqdistlut[MAXXDIM];
 __declspec(align(16)) static float dpqmulval[4] = {0,1,2,3}, dpqfour[4] = {4,4,4,4};
-__declspec(align(8)) static float dpq3dn[4];
 void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 						 float x0, float y0, float z0, float u0, float v0,
 						 float x1, float y1, float z1, float u1, float v1,
@@ -8778,18 +8492,14 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 	uvmax = (rysiz-1)*rbpl + (rxsiz<<2);
 
 	scaler = 1.f/scaler; t = dx*scaler;
-	if (cputype&(1<<25))
+	_asm //SSE
 	{
-		_asm //SSE
-		{
-			movss xmm6, t         ;xmm6: -,-,-,dx*scaler
-			shufps xmm6, xmm6, 0  ;xmm6: dx*scaler,dx*scaler,dx*scaler,dx*scaler
-			movaps xmm7, xmm6     ;xmm7: dx*scaler,dx*scaler,dx*scaler,dx*scaler
-			mulps xmm6, dpqmulval ;xmm6: dx*scaler*3,dx*scaler*2,dx*scaler*1,0
-			mulps xmm7, dpqfour   ;xmm7: dx*scaler*4,dx*scaler*4,dx*scaler*4,dx*scaler*4
-		}
+		movss xmm6, t         ;xmm6: -,-,-,dx*scaler
+		shufps xmm6, xmm6, 0  ;xmm6: dx*scaler,dx*scaler,dx*scaler,dx*scaler
+		movaps xmm7, xmm6     ;xmm7: dx*scaler,dx*scaler,dx*scaler,dx*scaler
+		mulps xmm6, dpqmulval ;xmm6: dx*scaler*3,dx*scaler*2,dx*scaler*1,0
+		mulps xmm7, dpqfour   ;xmm7: dx*scaler*4,dx*scaler*4,dx*scaler*4,dx*scaler*4
 	}
-	else { dpq3dn[0] = 0; dpq3dn[1] = t; dpq3dn[2] = dpq3dn[3] = t+t; } //3DNow!
 #endif
 
 	imin = (py[1]<py[0]); imax = 1-imin;
@@ -8848,7 +8558,7 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 					p++; sx++;
 				} while (p < pe);
 #else
-					//Optimized (in C) hyperbolic texture-mapping (Added Z-buffer using SSE/3DNow! for recip's)
+					//Optimized (in C) hyperbolic texture-mapping (Added Z-buffer using SSE for recip's)
 				t = dx*(float)sx + dy*(float)sy + db; r = 1.0 / t;
 				u = ux*(float)sx + uy*(float)sy + ub; ftol(u*r-.5,&iu);
 				v = vx*(float)sx + vy*(float)sy + vb; ftol(v*r-.5,&iv);
@@ -8869,9 +8579,6 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 					sub eax, ecx
 					add ecx, offset dpqdistlut
 
-					test cputype, 1 shl 25
-					jz short dpqpre3dn
-
 					movss xmm0, t ;dd+ddi*3 dd+ddi*2 dd+ddi*1 dd+ddi*0
 					shufps xmm0, xmm0, 0
 					addps xmm0, xmm6
@@ -8880,22 +8587,6 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 					movaps [eax+ecx], xmm1
 					add eax, 16
 					jl short dpqbegsse
-					jmp short dpqendit
-
-	 dpqpre3dn: movd mm0, t ;dd+ddi*1 dd+ddi*0
-					punpckldq mm0, mm0
-					pfadd mm0, dpq3dn[0]
-					movq mm7, dpq3dn[8]
-	 dpqbeg3dn: pswapd mm2, mm0
-					pfrcp mm1, mm0     ;mm1: 1/mm0l 1/mm0l
-					pfrcp mm2, mm2     ;mm2: 1/mm0h 1/mm0h
-					punpckldq mm1, mm2 ;mm1: 1/mm0h 1/mm0l
-					pfadd mm0, mm7
-					movq [eax+ecx], mm1
-					add eax, 8
-					jl short dpqbeg3dn
-					femms
-	  dpqendit:
 				}
 				distlutoffs = ((intptr_t)dpqdistlut)-((intptr_t)p);
 				do
@@ -9422,13 +9113,9 @@ char ptfaces16[43][8] =
 
 void drawboundcubesseinit ();
 void drawboundcubesse (kv6voxtype *, int32_t);
-void drawboundcube3dninit ();
-void drawboundcube3dn (kv6voxtype *, int32_t);
 
 void drawboundcubenozsseinit();
 void drawboundcubenozsse(kv6voxtype *, int32_t);
-void drawboundcubenoz3dninit();
-void drawboundcubenoz3dn(kv6voxtype *, int32_t);
 
 #ifdef __cplusplus
 }
@@ -9773,112 +9460,6 @@ static _inline void maxps (point4d *sum, point4d *a, point4d *b)
 	}
 }
 
-static _inline void movps_3dn (point4d *dest, point4d *src)
-{
-	_asm
-	{
-		mov eax, src
-		movq mm0, [eax]
-		movq mm1, [eax+8]
-		mov eax, dest
-		movq [eax], mm0
-		movq [eax+8], mm1
-	}
-}
-
-static _inline void intss_3dn (point4d *dest, int32_t src)
-{
-	_asm
-	{
-		mov eax, dest
-		movd mm0, src
-		pi2fd mm0, mm0
-		punpckldq mm0, mm0
-		movq [eax], mm0
-		movq [eax+8], mm0
-	}
-}
-
-static _inline void addps_3dn (point4d *sum, point4d *a, point4d *b)
-{
-	_asm
-	{
-		mov eax, a
-		movq mm0, [eax]
-		movq mm1, [eax+8]
-		mov eax, b
-		pfadd mm0, [eax]
-		pfadd mm1, [eax+8]
-		mov eax, sum
-		movq [eax], mm0
-		movq [eax+8], mm1
-	}
-}
-
-static _inline void mulps_3dn (point4d *sum, point4d *a, point4d *b)
-{
-	_asm
-	{
-		mov eax, a
-		movq mm0, [eax]
-		movq mm1, [eax+8]
-		mov eax, b
-		pfmul mm0, [eax]
-		pfmul mm1, [eax+8]
-		mov eax, sum
-		movq [eax], mm0
-		movq [eax+8], mm1
-	}
-}
-
-static _inline void subps_3dn (point4d *sum, point4d *a, point4d *b)
-{
-	_asm
-	{
-		mov eax, a
-		movq mm0, [eax]
-		movq mm1, [eax+8]
-		mov eax, b
-		pfsub mm0, [eax]
-		pfsub mm1, [eax+8]
-		mov eax, sum
-		movq [eax], mm0
-		movq [eax+8], mm1
-	}
-}
-
-static _inline void minps_3dn (point4d *sum, point4d *a, point4d *b)
-{
-	_asm
-	{
-		mov eax, a
-		movq mm0, [eax]
-		movq mm1, [eax+8]
-		mov eax, b
-		pfmin mm0, [eax]
-		pfmin mm1, [eax+8]
-		mov eax, sum
-		movq [eax], mm0
-		movq [eax+8], mm1
-	}
-}
-
-static _inline void maxps_3dn (point4d *sum, point4d *a, point4d *b)
-{
-	_asm
-	{
-		mov eax, a
-		movq mm0, [eax]
-		movq mm1, [eax+8]
-		mov eax, b
-		pfmax mm0, [eax]
-		pfmax mm1, [eax+8]
-		mov eax, sum
-		movq [eax], mm0
-		movq [eax+8], mm1
-	}
-}
-
 #endif
 
 #define DRAWBOUNDCUBELINE(const) \
@@ -9886,20 +9467,10 @@ static _inline void maxps_3dn (point4d *sum, point4d *a, point4d *b)
 	for(;v0<=v1 && v1->z>inz;v1--) drawboundcubesse(v1,const+0x10);\
 						  if (v0 == v1) drawboundcubesse(v1,const+0x00);
 
-#define DRAWBOUNDCUBELINE_3DN(const) \
-	for(;v0<=v1 && v0->z<inz;v0++) drawboundcube3dn(v0,const+0x20);\
-	for(;v0<=v1 && v1->z>inz;v1--) drawboundcube3dn(v1,const+0x10);\
-						  if (v0 == v1) drawboundcube3dn(v1,const+0x00);
-
 #define DRAWBOUNDCUBENOZLINE(const) \
 	for(;v0<=v1 && v0->z<inz;v0++) drawboundcubenozsse(v0,const+0x20);\
 	for(;v0<=v1 && v1->z>inz;v1--) drawboundcubenozsse(v1,const+0x10);\
 						  if (v0 == v1) drawboundcubenozsse(v1,const+0x00);
-
-#define DRAWBOUNDCUBENOZLINE_3DN(const) \
-	for(;v0<=v1 && v0->z<inz;v0++) drawboundcubenoz3dn(v0,const+0x20);\
-	for(;v0<=v1 && v1->z>inz;v1--) drawboundcubenoz3dn(v1,const+0x10);\
-						  if (v0 == v1) drawboundcubenoz3dn(v1,const+0x00);
 
 	//Code taken from renderboundcube of SLAB6D (Pentium III version :)
 #define MAXZSIZ 1024
@@ -10148,106 +9719,6 @@ static void kv6draw (vx5sprite *spr)
 			}
 		}
 	}
-	else
-	{
-		addps_3dn(&cadd4[3],&cadd4[1],&cadd4[2]);
-		addps_3dn(&cadd4[5],&cadd4[1],&cadd4[4]);
-		addps_3dn(&cadd4[6],&cadd4[2],&cadd4[4]);
-		addps_3dn(&cadd4[7],&cadd4[3],&cadd4[4]);
-
-		for(z=1;z<kv->zsiz;z++) addps_3dn(&ztab4[z],&ztab4[z-1],&cadd4[2]);
-		intss_3dn(r2,-kv->ysiz); mulps_3dn(r2,r2,&cadd4[4]);
-
-		subps_3dn(r1,r1,&cadd4[4]); //ANNOYING HACK!!!
-
-		_asm
-		{
-			movq mm6, qsum0
-			movq mm7, qsum1
-		}
-
-		xv = kv->vox; ylenptr = kv->ylen;
-		for(x=0;x<inx;x++,ylenptr+=kv->ysiz)
-		{
-			if ((x < nxplanemin) || (x >= nxplanemax))
-				{ xv += kv->xlen[x]; addps_3dn(r1,r1,&cadd4[1]); continue; }
-			yv = xv+kv->xlen[x]; movps_3dn(r0,r1);
-			for(y=0;y<iny;y++)
-			{
-				v0 = xv; xv += ylenptr[y]; v1 = xv-1;
-				DRAWBOUNDCUBELINE_3DN(0xa)
-				subps_3dn(r0,r0,&cadd4[4]);
-			}
-			xv = yv;
-			addps_3dn(r0,r1,r2);
-			addps_3dn(r1,r1,&cadd4[1]);
-			for(y=kv->ysiz-1;y>iny;y--)
-			{
-				addps_3dn(r0,r0,&cadd4[4]);
-				v1 = yv-1; yv -= ylenptr[y]; v0 = yv;
-				DRAWBOUNDCUBELINE_3DN(0x6)
-			}
-			if ((uint32_t)iny < (uint32_t)kv->ysiz)
-			{
-				addps_3dn(r0,r0,&cadd4[4]);
-				v1 = yv-1; yv -= ylenptr[y]; v0 = yv;
-				DRAWBOUNDCUBELINE_3DN(0x2)
-			}
-		}
-		xv = &kv->vox[kv->numvoxs]; ylenptr = &kv->ylen[(kv->xsiz-1)*kv->ysiz];
-		intss_3dn(r0,kv->xsiz-x); mulps_3dn(r0,r0,&cadd4[1]); addps_3dn(r1,r1,r0);
-		for(x=kv->xsiz-1;x>inx;x--,ylenptr-=kv->ysiz)
-		{
-			if ((x < nxplanemin) || (x >= nxplanemax))
-				{ xv -= kv->xlen[x]; subps_3dn(r1,r1,&cadd4[1]); continue; }
-			yv = xv-kv->xlen[x];
-			subps_3dn(r1,r1,&cadd4[1]);
-			addps_3dn(r0,r1,r2);
-			for(y=kv->ysiz-1;y>iny;y--)
-			{
-				addps_3dn(r0,r0,&cadd4[4]);
-				v1 = xv-1; xv -= ylenptr[y]; v0 = xv;
-				DRAWBOUNDCUBELINE_3DN(0x5)
-			}
-			xv = yv; movps_3dn(r0,r1);
-			for(y=0;y<iny;y++)
-			{
-				v0 = yv; yv += ylenptr[y]; v1 = yv-1;
-				DRAWBOUNDCUBELINE_3DN(0x9)
-				subps_3dn(r0,r0,&cadd4[4]);
-			}
-			if ((uint32_t)iny < (uint32_t)kv->ysiz)
-			{
-				v0 = yv; yv += ylenptr[y]; v1 = yv-1;
-				DRAWBOUNDCUBELINE_3DN(0x1)
-			}
-		}
-		if ((uint32_t)inx < (uint32_t)kv->xsiz)
-		{
-			if ((x < nxplanemin) || (x >= nxplanemax)) { { _asm emms } return; }
-			yv = xv-kv->xlen[x];
-			subps_3dn(r1,r1,&cadd4[1]);
-			addps_3dn(r0,r1,r2);
-			for(y=kv->ysiz-1;y>iny;y--)
-			{
-				addps_3dn(r0,r0,&cadd4[4]);
-				v1 = xv-1; xv -= ylenptr[y]; v0 = xv;
-				DRAWBOUNDCUBELINE_3DN(0x4)
-			}
-			xv = yv; movps_3dn(r0,r1);
-			for(y=0;y<iny;y++)
-			{
-				v0 = yv; yv += ylenptr[y]; v1 = yv-1;
-				DRAWBOUNDCUBELINE_3DN(0x8)
-				subps_3dn(r0,r0,&cadd4[4]);
-			}
-			if ((uint32_t)iny < (uint32_t)kv->ysiz)
-			{
-				v0 = yv; yv += ylenptr[y]; v1 = yv-1;
-				DRAWBOUNDCUBELINE_3DN(0x0)
-			}
-		}
-	}
 	_asm emms
 }
 
@@ -10460,110 +9931,6 @@ static void kv6draw_noz(vx5sprite *spr)
 			{
 				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
 				DRAWBOUNDCUBENOZLINE(0x0)
-			}
-		}
-	}
-	else
-	{
-		addps_3dn(&cadd4[3], &cadd4[1], &cadd4[2]);
-		addps_3dn(&cadd4[5], &cadd4[1], &cadd4[4]);
-		addps_3dn(&cadd4[6], &cadd4[2], &cadd4[4]);
-		addps_3dn(&cadd4[7], &cadd4[3], &cadd4[4]);
-
-		for (z = 1; z<kv->zsiz; z++) addps_3dn(&ztab4[z], &ztab4[z - 1], &cadd4[2]);
-		intss_3dn(r2, -kv->ysiz); mulps_3dn(r2, r2, &cadd4[4]);
-
-		subps_3dn(r1, r1, &cadd4[4]); //ANNOYING HACK!!!
-
-		_asm
-		{
-			movq mm6, qsum0
-			movq mm7, qsum1
-		}
-
-		xv = kv->vox; ylenptr = kv->ylen;
-		for (x = 0; x<inx; x++, ylenptr += kv->ysiz)
-		{
-			if ((x < nxplanemin) || (x >= nxplanemax))
-			{
-				xv += kv->xlen[x]; addps_3dn(r1, r1, &cadd4[1]); continue;
-			}
-			yv = xv + kv->xlen[x]; movps_3dn(r0, r1);
-			for (y = 0; y<iny; y++)
-			{
-				v0 = xv; xv += ylenptr[y]; v1 = xv - 1;
-				DRAWBOUNDCUBENOZLINE_3DN(0xa)
-					subps_3dn(r0, r0, &cadd4[4]);
-			}
-			xv = yv;
-			addps_3dn(r0, r1, r2);
-			addps_3dn(r1, r1, &cadd4[1]);
-			for (y = kv->ysiz - 1; y>iny; y--)
-			{
-				addps_3dn(r0, r0, &cadd4[4]);
-				v1 = yv - 1; yv -= ylenptr[y]; v0 = yv;
-				DRAWBOUNDCUBENOZLINE_3DN(0x6)
-			}
-			if ((uint32_t)iny < (uint32_t)kv->ysiz)
-			{
-				addps_3dn(r0, r0, &cadd4[4]);
-				v1 = yv - 1; yv -= ylenptr[y]; v0 = yv;
-				DRAWBOUNDCUBENOZLINE_3DN(0x2)
-			}
-		}
-		xv = &kv->vox[kv->numvoxs]; ylenptr = &kv->ylen[(kv->xsiz - 1)*kv->ysiz];
-		intss_3dn(r0, kv->xsiz - x); mulps_3dn(r0, r0, &cadd4[1]); addps_3dn(r1, r1, r0);
-		for (x = kv->xsiz - 1; x>inx; x--, ylenptr -= kv->ysiz)
-		{
-			if ((x < nxplanemin) || (x >= nxplanemax))
-			{
-				xv -= kv->xlen[x]; subps_3dn(r1, r1, &cadd4[1]); continue;
-			}
-			yv = xv - kv->xlen[x];
-			subps_3dn(r1, r1, &cadd4[1]);
-			addps_3dn(r0, r1, r2);
-			for (y = kv->ysiz - 1; y>iny; y--)
-			{
-				addps_3dn(r0, r0, &cadd4[4]);
-				v1 = xv - 1; xv -= ylenptr[y]; v0 = xv;
-				DRAWBOUNDCUBENOZLINE_3DN(0x5)
-			}
-			xv = yv; movps_3dn(r0, r1);
-			for (y = 0; y<iny; y++)
-			{
-				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
-				DRAWBOUNDCUBENOZLINE_3DN(0x9)
-					subps_3dn(r0, r0, &cadd4[4]);
-			}
-			if ((uint32_t)iny < (uint32_t)kv->ysiz)
-			{
-				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
-				DRAWBOUNDCUBENOZLINE_3DN(0x1)
-			}
-		}
-		if ((uint32_t)inx < (uint32_t)kv->xsiz)
-		{
-			if ((x < nxplanemin) || (x >= nxplanemax)) { { _asm emms } return; }
-			yv = xv - kv->xlen[x];
-			subps_3dn(r1, r1, &cadd4[1]);
-			addps_3dn(r0, r1, r2);
-			for (y = kv->ysiz - 1; y>iny; y--)
-			{
-				addps_3dn(r0, r0, &cadd4[4]);
-				v1 = xv - 1; xv -= ylenptr[y]; v0 = xv;
-				DRAWBOUNDCUBENOZLINE_3DN(0x4)
-			}
-			xv = yv; movps_3dn(r0, r1);
-			for (y = 0; y<iny; y++)
-			{
-				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
-				DRAWBOUNDCUBENOZLINE_3DN(0x8)
-					subps_3dn(r0, r0, &cadd4[4]);
-			}
-			if ((uint32_t)iny < (uint32_t)kv->ysiz)
-			{
-				v0 = yv; yv += ylenptr[y]; v1 = yv - 1;
-				DRAWBOUNDCUBENOZLINE_3DN(0x0)
 			}
 		}
 	}
@@ -12606,8 +11973,8 @@ fogend2:    emms
 		}
 	} else ofogdist = -1;
 
-	if (cputype&(1 << 25)) drawboundcubesseinit(); else drawboundcube3dninit();
-	if (cputype&(1 << 25)) drawboundcubenozsseinit(); else drawboundcubenoz3dninit();
+	drawboundcubesseinit();
+	drawboundcubenozsseinit();
 }
 
 //------------------------ Simple PNG OUT code begins ------------------------
@@ -12877,11 +12244,8 @@ int32_t initvoxlap ()
 		//CPU Must have: FPU,RDTSC,CMOV,MMX,MMX+
 	if ((cputype&((1<<0)|(1<<4)|(1<<15)|(1<<22)|(1<<23))) !=
 					 ((1<<0)|(1<<4)|(1<<15)|(1<<22)|(1<<23))) return(-1);
-		//CPU UNSUPPORTED!
-	if ((!(cputype&(1<<25))) && //SSE
-		(!((cputype&((1<<30)|(1<<31))) == ((1<<30)|(1<<31))))) //3DNow!+
-		return(-1);
-	//if (cputype&(1<<25)) fixsse(); //SSE
+		//CPU UNSUPPORTED! SSE is baseline after 3DNow removal.
+	if (!(cputype&(1<<25))) return(-1);
 
 	  //WARNING: xres&yres are local to VOXLAP5.C so don't rely on them here!
 	if (!(radarmem = (int32_t *)malloc(max((((MAXXDIM*MAXYDIM*27)>>1)+7)&~7,(VSID+4)*3*SCPITCH*4+8))))
