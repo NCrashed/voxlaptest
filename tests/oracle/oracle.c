@@ -50,6 +50,13 @@ enum { XRES = 640, YRES = 480, BYTESPERLINE = XRES * 4 };
 
 static int32_t g_fb[XRES * YRES];
 
+/* A procedural kv6 sprite, built once via meltsphere in build_scene and
+ * rendered in the "sprite_*" poses below. This covers the drawsprite
+ * pipeline — drawboundcube_{sse,3dn}{,init} inside voxlap5.c plus the
+ * matching entry points in v5.asm — that Stage 4 will rewrite as SSE2
+ * intrinsics. Without this, sprite rendering has zero hash coverage. */
+static vx5sprite g_sprite;
+
 static uint64_t fnv1a64(const void *data, size_t n) {
 	const uint8_t *p = (const uint8_t *)data;
 	uint64_t h = 0xcbf29ce484222325ULL;
@@ -113,7 +120,50 @@ static void build_scene(void) {
 	c.x = 1060; c.y = 1040; c.z = 178;
 	setsphere(&c, 8, 0);
 
+	/* -- Hidden voxel source for the meltsphere sprite --
+	 * Paint a ~12x12x15 multi-coloured block at (600, 600, 100),
+	 * deep inside the surrounding solid mass. This is well outside
+	 * the 800..1248 playable box, so the first four poses cannot
+	 * see the carve that meltsphere will leave behind — their
+	 * golden hashes stay put. Four tones (red/green/blue stripes +
+	 * a magenta asymmetry marker on one face) give the sprite
+	 * visible orientation cues in the PNGs. */
+	set_curcol((int32_t)BR(0xff4030)); /* red top stripe */
+	a.x = 594; a.y = 594; a.z = 93;
+	b.x = 606; b.y = 606; b.z = 98;
+	setrect(&a, &b, 0);
+
+	set_curcol((int32_t)BR(0x30c040)); /* green middle stripe */
+	a.x = 594; a.y = 594; a.z = 98;
+	b.x = 606; b.y = 606; b.z = 103;
+	setrect(&a, &b, 0);
+
+	set_curcol((int32_t)BR(0x3060ff)); /* blue bottom stripe */
+	a.x = 594; a.y = 594; a.z = 103;
+	b.x = 606; b.y = 606; b.z = 108;
+	setrect(&a, &b, 0);
+
+	set_curcol((int32_t)BR(0xff40c0)); /* magenta marker on -x face */
+	a.x = 593; a.y = 598; a.z = 99;
+	b.x = 594; b.y = 602; b.z = 102;
+	setrect(&a, &b, 0);
+
 	updatevxl();
+
+	/* Extract the painted block as a sprite kv6. After this call
+	 * g_sprite.voxnum points at a fresh kv6data the engine owns; we
+	 * just need to place it in world space. */
+	c.x = 600; c.y = 600; c.z = 100;
+	meltsphere(&g_sprite, &c, 8);
+
+	g_sprite.flags = 0; /* normal shading, voxnum is kv6data* */
+	g_sprite.p.x = 1050.f; g_sprite.p.y = 1050.f; g_sprite.p.z = 175.f;
+	g_sprite.s.x = 1.f; g_sprite.s.y = 0.f; g_sprite.s.z = 0.f;
+	g_sprite.h.x = 0.f; g_sprite.h.y = 1.f; g_sprite.h.z = 0.f;
+	g_sprite.f.x = 0.f; g_sprite.f.y = 0.f; g_sprite.f.z = 1.f;
+	g_sprite.kfatim = 0;
+	g_sprite.okfatim = 0;
+
 	genmipvxl(0, 0, VSID, VSID);
 }
 
@@ -137,14 +187,22 @@ struct pose {
 	const char *name;
 	double px, py, pz;
 	double yaw, pitch;
+	int32_t draw_sprite; /* 1 -> call drawsprite(&g_sprite) after opticast */
 };
 
 int main(void) {
 	static const struct pose poses[] = {
-		{"north",     1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0},
-		{"east",      1024.0, 1024.0, 128.0, 0.0,                0.0},
-		{"diag_down", 1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4},
-		{"high_down", 1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7},
+		{"north",        1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0, 0},
+		{"east",         1024.0, 1024.0, 128.0, 0.0,                0.0, 0},
+		{"diag_down",    1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, 0},
+		{"high_down",    1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7, 0},
+		/* Sprite poses: camera aimed at g_sprite at (1050, 1050, 175).
+		 * front: eye-level, looking at sprite along +x.
+		 * above: slightly in front, pitched steeply toward the sprite.
+		 * iso:   diagonal approach, mild pitch. */
+		{"sprite_front", 1020.0, 1050.0, 175.0, 0.0,                0.0, 1},
+		{"sprite_above", 1050.0, 1050.0, 150.0, 0.0,                1.3, 1},
+		{"sprite_iso",   1020.0, 1020.0, 160.0, 0.7853981633974483, 0.4, 1},
 	};
 	const size_t N = sizeof(poses) / sizeof(poses[0]);
 	size_t i;
@@ -170,6 +228,7 @@ int main(void) {
 		set_camera_yaw_pitch(poses[i].px, poses[i].py, poses[i].pz,
 		                     poses[i].yaw, poses[i].pitch);
 		opticast();
+		if (poses[i].draw_sprite) drawsprite(&g_sprite);
 
 		h = fnv1a64(g_fb, sizeof(g_fb));
 		fprintf(hf,     "%s  %016llx\n", poses[i].name, (unsigned long long)h);
