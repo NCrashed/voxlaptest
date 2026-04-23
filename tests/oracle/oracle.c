@@ -36,6 +36,14 @@ extern void setRectOneColor(lpoint3d *hit1, lpoint3d *hit2, long ARGB);
 extern void set_curcol(long v);
 extern void set_jitamount(long v);
 extern void set_colfunc(long (*v)(lpoint3d *));
+extern void set_fogcol(long v);
+extern void setMaxScanDistToMax(void);
+
+/* Voxlap's 32-bit colour is packed as (brightness<<24) | (R<<16) | (G<<8) | B.
+ * The alpha byte is *brightness*, not opacity: setting it to 0x00 renders
+ * pixels as black regardless of RGB. 0x80 is the engine's "normal" level,
+ * matching the built-in walls placed by loadnul. */
+#define BR(rgb) (0x80000000u | (uint32_t)(rgb))
 
 enum { XRES = 640, YRES = 480, BYTESPERLINE = XRES * 4 };
 
@@ -55,48 +63,47 @@ static void build_scene(void) {
 
 	loadnul(&ipo, &ist, &ihe, &ifo);
 
-	/* Disable color jitter so the shapes we place below carry the exact
-	 * ARGB values we specify. Voxels previously written by loadnul keep
-	 * their jittered colors, but we carve those away below. */
+	/* See the whole map: max out ray distance and paint the horizon with
+	 * sky-blue so rays that escape don't fall back to black. */
+	setMaxScanDistToMax();
+	set_fogcol((long)BR(0x87ceeb));
+
+	/* Disable colour jitter so inserted shapes carry the exact ARGB
+	 * values we specify. */
 	set_colfunc(curcolfunc);
 	set_jitamount(0);
 
+	/* Voxlap paints newly-exposed bedrock surfaces with the current
+	 * curcol. Set it to a cool grey *before* the big carve so the
+	 * ground plane reads as stone rather than loadnul's default brown. */
+	set_curcol((long)BR(0x606878));
+
 	/* Voxlap's +Z is down (z=0 is sky, z=MAXZDIM-1 is deep underground).
-	 * loadnul leaves the whole volume solid except for a 180-cube chamber
-	 * at the center — which is why the first artifacts looked like an
-	 * interior room. Carve the entire map out from the sky (z=0) down to
-	 * a floor plane at z=189, so the camera stands in an open space with
-	 * solid ground below and open "sky" above (rays hit nothing, and
-	 * main() pre-fills the framebuffer with sky-blue). */
+	 * loadnul leaves the map solid except for a 180-cube chamber at the
+	 * centre — hence the "interior room" artifact. Carve the whole volume
+	 * from the sky down to a floor plane at z=189 so the camera stands
+	 * in open space. */
 	a.x = 4;         a.y = 4;         a.z = 0;
 	b.x = VSID - 4;  b.y = VSID - 4;  b.z = 189;
 	setrect(&a, &b, -1);
 
-	/* Grey stone platform around the "stage" area so the shapes read as
-	 * standing on ground rather than embedded in uniform terrain. */
-	a.x = 980;  a.y = 980;   a.z = 190;
-	b.x = 1070; b.y = 1100;  b.z = 195;
-	setRectOneColor(&a, &b, 0x00808080);
-
-	/* Red pillar standing on the platform */
+	/* Red pillar */
 	a.x = 1010; a.y = 1090; a.z = 160;
 	b.x = 1020; b.y = 1100; b.z = 189;
-	setRectOneColor(&a, &b, 0x00ff2020);
+	setRectOneColor(&a, &b, (long)BR(0xff3030));
 
-	/* Green cube on the platform, closer to camera */
+	/* Green cube */
 	a.x = 1030; a.y = 1050; a.z = 180;
 	b.x = 1040; b.y = 1060; b.z = 189;
-	setRectOneColor(&a, &b, 0x0020c020);
+	setRectOneColor(&a, &b, (long)BR(0x30c030));
 
 	/* Blue flat tile */
 	a.x = 1000; a.y = 1030; a.z = 188;
 	b.x = 1050; b.y = 1070; b.z = 189;
-	setRectOneColor(&a, &b, 0x002050ff);
+	setRectOneColor(&a, &b, (long)BR(0x3060ff));
 
-	/* Yellow sphere resting on the platform. setsphere reads its color
-	 * from vx5.curcol via vx5.colfunc (= curcolfunc, set above), so we
-	 * set curcol directly via the exported setter. */
-	set_curcol(0x00ffd040);
+	/* Yellow sphere. setsphere reads its colour from vx5.curcol. */
+	set_curcol((long)BR(0xffd050));
 	c.x = 1060; c.y = 1040; c.z = 183;
 	setsphere(&c, 8, 0);
 
@@ -149,11 +156,9 @@ int main(void) {
 		char png[64];
 		size_t k;
 
-		/* Pre-fill the framebuffer with sky-blue. opticast only writes
-		 * pixels where a ray hits a voxel; rays that escape above the
-		 * carved ceiling (z<0) leave the underlying pixel untouched, so
-		 * this colour shows through as "sky". */
-		for (k = 0; k < XRES * YRES; k++) g_fb[k] = (int32_t)0x0087ceeb;
+		/* Pre-fill with the same sky-blue that fogcol uses, so any pixel
+		 * opticast happens to leave untouched still reads as sky. */
+		for (k = 0; k < XRES * YRES; k++) g_fb[k] = (int32_t)BR(0x87ceeb);
 
 		set_camera_yaw_pitch(poses[i].px, poses[i].py, poses[i].pz,
 		                     poses[i].yaw, poses[i].pitch);
