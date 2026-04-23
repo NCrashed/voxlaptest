@@ -74,8 +74,9 @@ static __inline long filelength (int h)
 #elif defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#define DLLEXPORT __declspec(dllexport) 
 #endif
+
+#include "voxlap_export.h"
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -2167,23 +2168,23 @@ static long ktgarend (const char *header, long fleng,
 //==============================  TARGA ends =================================
 //==============================  BMP begins =================================
 	//TODO: handle BI_RLE8 and BI_RLE4 (compression types 1&2 respectively)
-	//                        ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-	//                        ³  0(2): "BM"   ³
-	// ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿³ 10(4): rastoff³ ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-	// ³headsiz=12 (OS/2 1.x)³³ 14(4): headsiz³ ³ All new formats: ³
-	//ÚÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÁÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÁÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-	//³ 18(2): xsiz                         ³ 18(4): xsiz                                  ³
-	//³ 20(2): ysiz                         ³ 22(4): ysiz                                  ³
-	//³ 22(2): planes (always 1)            ³ 26(2): planes (always 1)                     ³
-	//³ 24(2): cdim (1,4,8,24)              ³ 28(2): cdim (1,4,8,16,24,32)                 ³
-	//³ if (cdim < 16)                      ³ 30(4): compression (0,1,2,3!?,4)             ³
-	//³    26(rastoff-14-headsiz): pal(bgr) ³ 34(4): (bitmap data size+3)&3                ³
-	//³                                     ³ 46(4): N colors (0=2^cdim)                   ³
-	//³                                     ³ if (cdim < 16)                               ³
-	//³                                     ³    14+headsiz(rastoff-14-headsiz): pal(bgr0) ³
-	//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
-	//                      ³ rastoff(?): bitmap data ³
-	//                      ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+	//                        ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿
+	//                        ï¿½  0(2): "BM"   ï¿½
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ 10(4): rastoffï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿
+	// ï¿½headsiz=12 (OS/2 1.x)ï¿½ï¿½ 14(4): headsizï¿½ ï¿½ All new formats: ï¿½
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿
+	//ï¿½ 18(2): xsiz                         ï¿½ 18(4): xsiz                                  ï¿½
+	//ï¿½ 20(2): ysiz                         ï¿½ 22(4): ysiz                                  ï¿½
+	//ï¿½ 22(2): planes (always 1)            ï¿½ 26(2): planes (always 1)                     ï¿½
+	//ï¿½ 24(2): cdim (1,4,8,24)              ï¿½ 28(2): cdim (1,4,8,16,24,32)                 ï¿½
+	//ï¿½ if (cdim < 16)                      ï¿½ 30(4): compression (0,1,2,3!?,4)             ï¿½
+	//ï¿½    26(rastoff-14-headsiz): pal(bgr) ï¿½ 34(4): (bitmap data size+3)&3                ï¿½
+	//ï¿½                                     ï¿½ 46(4): N colors (0=2^cdim)                   ï¿½
+	//ï¿½                                     ï¿½ if (cdim < 16)                               ï¿½
+	//ï¿½                                     ï¿½    14+headsiz(rastoff-14-headsiz): pal(bgr0) ï¿½
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	//                      ï¿½ rastoff(?): bitmap data ï¿½
+	//                      ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 static long kbmprend (const char *buf, long fleng,
 	long daframeplace, long dabytesperline, long daxres, long dayres,
 	long daglobxoffs, long daglobyoffs)
@@ -2739,7 +2740,7 @@ void kzuninit ()
 
 	//If file found, loads internal directory from ZIP/GRP into memory (hash) to allow faster access later
 	//If file not found, assumes it's a directory and adds it to an internal list
-DLLEXPORT long kzaddstack (const char *filnam)
+VOXLAP_API long kzaddstack (const char *filnam)
 {
 	FILE *fil;
 	long i, j, k, leng, hashind, zipnamoffs, numfiles;
@@ -3375,7 +3376,7 @@ void kzclose ()
 //====================== ZIP decompression code ends =========================
 //===================== HANDY PICTURE function begins ========================
 
-DLLEXPORT extern void kpzload (const char *filnam, long *pic, long *bpl, long *xsiz, long *ysiz)
+VOXLAP_API extern void kpzload (const char *filnam, long *pic, long *bpl, long *xsiz, long *ysiz)
 {
 	char *buf;
 	long leng;

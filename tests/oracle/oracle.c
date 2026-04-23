@@ -31,7 +31,7 @@
 #include <string.h>
 
 /* Wrappers declared in exports.c (not in voxlap5.h). Re-declare here so the
- * oracle doesn't need a second header. Linkage matches the DLLEXPORTed defs. */
+ * oracle doesn't need a second header. Linkage matches the VOXLAP_API defs. */
 extern void setRectOneColor(lpoint3d *hit1, lpoint3d *hit2, long ARGB);
 extern void set_curcol(long v);
 extern void set_jitamount(long v);

@@ -7,7 +7,7 @@
 #define VSID 2048   //Maximum .VXL dimensions in both x & y direction
 #define MAXZDIM 256 //Maximum .VXL dimensions in z direction (height)
 
-#define DLLEXPORT __declspec(dllexport)
+#include "voxlap_export.h"
 
 #pragma pack(push,1)
 
@@ -166,146 +166,146 @@ struct vx5
 } vx5;
 
 	//Initialization functions:
-DLLEXPORT extern long initvoxlap ();
-DLLEXPORT extern void uninitvoxlap ();
+VOXLAP_API extern long initvoxlap ();
+VOXLAP_API extern void uninitvoxlap ();
 
 	//File related functions:
-DLLEXPORT extern long loadsxl (const char *, char **, char **, char **);
-DLLEXPORT extern char *parspr (vx5sprite *, char **);
-DLLEXPORT extern void loadnul (dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
-DLLEXPORT extern long loaddta (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
-DLLEXPORT extern long loadpng (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
-DLLEXPORT extern void loadbsp (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
-DLLEXPORT extern long loadvxl (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
-DLLEXPORT extern long savevxl (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
-DLLEXPORT extern long loadsky (const char *);
+VOXLAP_API extern long loadsxl (const char *, char **, char **, char **);
+VOXLAP_API extern char *parspr (vx5sprite *, char **);
+VOXLAP_API extern void loadnul (dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
+VOXLAP_API extern long loaddta (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
+VOXLAP_API extern long loadpng (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
+VOXLAP_API extern void loadbsp (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
+VOXLAP_API extern long loadvxl (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
+VOXLAP_API extern long savevxl (const char *, dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *);
+VOXLAP_API extern long loadsky (const char *);
 
 	//Screen related functions:
-DLLEXPORT extern void voxsetframebuffer (long, long, long, long);
-DLLEXPORT extern void setsideshades (char, char, char, char, char, char);
-DLLEXPORT extern void setcamera (dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *, float, float, float);
-DLLEXPORT extern void opticast ();
-DLLEXPORT extern void drawpoint2d (long, long, long);
-DLLEXPORT extern void drawpoint3d (float, float, float, long);
-DLLEXPORT extern void drawline2d (float, float, float, float, long);
-DLLEXPORT extern void drawline3d (float, float, float, float, float, float, long);
-DLLEXPORT extern long project2d (float, float, float, float *, float *, float *);
-DLLEXPORT extern ray3d unproject2d(float, float);
-DLLEXPORT extern void drawspherefill (float, float, float, float, long);
-DLLEXPORT extern void drawpicinquad (long, long, long, long, long, long, long, long, float, float, float, float, float, float, float, float);
-DLLEXPORT extern void drawpolyquad (long, long, long, long, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float);
-DLLEXPORT extern void print4x6 (long, long, long, long, const char *, ...);
-DLLEXPORT extern void print6x8 (long, long, long, long, const char *, ...);
-DLLEXPORT extern void drawtile (long, long, long, long, long, long, long, long, long, long, long, long);
-DLLEXPORT extern long screencapture32bit (const char *);
-DLLEXPORT extern long surroundcapture32bit (dpoint3d *, const char *, long);
+VOXLAP_API extern void voxsetframebuffer (long, long, long, long);
+VOXLAP_API extern void setsideshades (char, char, char, char, char, char);
+VOXLAP_API extern void setcamera (dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *, float, float, float);
+VOXLAP_API extern void opticast ();
+VOXLAP_API extern void drawpoint2d (long, long, long);
+VOXLAP_API extern void drawpoint3d (float, float, float, long);
+VOXLAP_API extern void drawline2d (float, float, float, float, long);
+VOXLAP_API extern void drawline3d (float, float, float, float, float, float, long);
+VOXLAP_API extern long project2d (float, float, float, float *, float *, float *);
+VOXLAP_API extern ray3d unproject2d(float, float);
+VOXLAP_API extern void drawspherefill (float, float, float, float, long);
+VOXLAP_API extern void drawpicinquad (long, long, long, long, long, long, long, long, float, float, float, float, float, float, float, float);
+VOXLAP_API extern void drawpolyquad (long, long, long, long, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float);
+VOXLAP_API extern void print4x6 (long, long, long, long, const char *, ...);
+VOXLAP_API extern void print6x8 (long, long, long, long, const char *, ...);
+VOXLAP_API extern void drawtile (long, long, long, long, long, long, long, long, long, long, long, long);
+VOXLAP_API extern long screencapture32bit (const char *);
+VOXLAP_API extern long surroundcapture32bit (dpoint3d *, const char *, long);
 
 	//Sprite related functions:
-DLLEXPORT extern kv6data *getkv6 (const char *);
-DLLEXPORT extern kfatype *getkfa (const char *);
-DLLEXPORT extern void freekv6 (kv6data *kv6);
-DLLEXPORT extern void savekv6 (const char *, kv6data *);
-DLLEXPORT extern void getspr (vx5sprite *, const char *);
-DLLEXPORT extern kv6data *genmipkv6 (kv6data *);
-DLLEXPORT extern char *getkfilname (long);
-DLLEXPORT extern void animsprite (vx5sprite *, long);
-DLLEXPORT extern void drawsprite (vx5sprite *);
-DLLEXPORT extern long meltsphere (vx5sprite *, lpoint3d *, long);
-DLLEXPORT extern long meltspans (vx5sprite *, vspans *, long, lpoint3d *);
+VOXLAP_API extern kv6data *getkv6 (const char *);
+VOXLAP_API extern kfatype *getkfa (const char *);
+VOXLAP_API extern void freekv6 (kv6data *kv6);
+VOXLAP_API extern void savekv6 (const char *, kv6data *);
+VOXLAP_API extern void getspr (vx5sprite *, const char *);
+VOXLAP_API extern kv6data *genmipkv6 (kv6data *);
+VOXLAP_API extern char *getkfilname (long);
+VOXLAP_API extern void animsprite (vx5sprite *, long);
+VOXLAP_API extern void drawsprite (vx5sprite *);
+VOXLAP_API extern long meltsphere (vx5sprite *, lpoint3d *, long);
+VOXLAP_API extern long meltspans (vx5sprite *, vspans *, long, lpoint3d *);
 
 	//Physics helper functions:
-DLLEXPORT extern void orthonormalize (point3d *, point3d *, point3d *);
-DLLEXPORT extern void dorthonormalize (dpoint3d *, dpoint3d *, dpoint3d *);
-DLLEXPORT extern void orthorotate (float, float, float, point3d *, point3d *, point3d *);
-DLLEXPORT extern void dorthorotate (double, double, double, dpoint3d *, dpoint3d *, dpoint3d *);
-DLLEXPORT extern void axisrotate (point3d *, point3d *, float);
-DLLEXPORT extern void slerp (point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, float);
-DLLEXPORT extern long cansee (point3d *, point3d *, lpoint3d *);
-DLLEXPORT extern void hitscan (dpoint3d *, dpoint3d *, lpoint3d *, long **, long *);
-DLLEXPORT extern void sprhitscan (dpoint3d *, dpoint3d *, vx5sprite *, lpoint3d *, kv6voxtype **, float *vsc);
-DLLEXPORT extern double findmaxcr (double, double, double, double);
-DLLEXPORT extern void clipmove (dpoint3d *, dpoint3d *, double);
-DLLEXPORT extern long triscan (point3d *, point3d *, point3d *, point3d *, lpoint3d *);
-DLLEXPORT extern void estnorm (long, long, long, point3d *);
+VOXLAP_API extern void orthonormalize (point3d *, point3d *, point3d *);
+VOXLAP_API extern void dorthonormalize (dpoint3d *, dpoint3d *, dpoint3d *);
+VOXLAP_API extern void orthorotate (float, float, float, point3d *, point3d *, point3d *);
+VOXLAP_API extern void dorthorotate (double, double, double, dpoint3d *, dpoint3d *, dpoint3d *);
+VOXLAP_API extern void axisrotate (point3d *, point3d *, float);
+VOXLAP_API extern void slerp (point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, float);
+VOXLAP_API extern long cansee (point3d *, point3d *, lpoint3d *);
+VOXLAP_API extern void hitscan (dpoint3d *, dpoint3d *, lpoint3d *, long **, long *);
+VOXLAP_API extern void sprhitscan (dpoint3d *, dpoint3d *, vx5sprite *, lpoint3d *, kv6voxtype **, float *vsc);
+VOXLAP_API extern double findmaxcr (double, double, double, double);
+VOXLAP_API extern void clipmove (dpoint3d *, dpoint3d *, double);
+VOXLAP_API extern long triscan (point3d *, point3d *, point3d *, point3d *, lpoint3d *);
+VOXLAP_API extern void estnorm (long, long, long, point3d *);
 
 	//VXL reading functions (fast!):
-DLLEXPORT extern long isvoxelsolid (long, long, long);
-DLLEXPORT extern long anyvoxelsolid (long, long, long, long);
-DLLEXPORT extern long anyvoxelempty (long, long, long, long);
-DLLEXPORT extern long getfloorz (long, long, long);
-DLLEXPORT extern long getcube (long, long, long);
+VOXLAP_API extern long isvoxelsolid (long, long, long);
+VOXLAP_API extern long anyvoxelsolid (long, long, long, long);
+VOXLAP_API extern long anyvoxelempty (long, long, long, long);
+VOXLAP_API extern long getfloorz (long, long, long);
+VOXLAP_API extern long getcube (long, long, long);
 
 	//VXL writing functions (optimized & bug-free):
-DLLEXPORT extern void setcube (long, long, long, long);
-DLLEXPORT extern void setsphere (lpoint3d *, long, long);
-DLLEXPORT extern void setellipsoid (lpoint3d *, lpoint3d *, long, long, long);
-DLLEXPORT extern void setcylinder (lpoint3d *, lpoint3d *, long, long, long);
-DLLEXPORT extern void setrect (lpoint3d *, lpoint3d *, long);
-DLLEXPORT extern void settri (point3d *, point3d *, point3d *, long);
-DLLEXPORT extern void setsector (point3d *, long *, long, float, long, long);
-DLLEXPORT extern void setspans (vspans *, long, lpoint3d *, long);
-DLLEXPORT extern void setheightmap (const unsigned char *, long, long, long, long, long, long, long);
-DLLEXPORT extern void setkv6 (vx5sprite *, long);
+VOXLAP_API extern void setcube (long, long, long, long);
+VOXLAP_API extern void setsphere (lpoint3d *, long, long);
+VOXLAP_API extern void setellipsoid (lpoint3d *, lpoint3d *, long, long, long);
+VOXLAP_API extern void setcylinder (lpoint3d *, lpoint3d *, long, long, long);
+VOXLAP_API extern void setrect (lpoint3d *, lpoint3d *, long);
+VOXLAP_API extern void settri (point3d *, point3d *, point3d *, long);
+VOXLAP_API extern void setsector (point3d *, long *, long, float, long, long);
+VOXLAP_API extern void setspans (vspans *, long, lpoint3d *, long);
+VOXLAP_API extern void setheightmap (const unsigned char *, long, long, long, long, long, long, long);
+VOXLAP_API extern void setkv6 (vx5sprite *, long);
 
 	//VXL writing functions (slow or buggy):
-DLLEXPORT extern void sethull3d (point3d *, long, long, long);
-DLLEXPORT extern void setlathe (point3d *, long, long, long);
-DLLEXPORT extern void setblobs (point3d *, long, long, long);
-DLLEXPORT extern void setfloodfill3d (long, long, long, long, long, long, long, long, long);
-DLLEXPORT extern void sethollowfill ();
-DLLEXPORT extern void setkvx (const char *, long, long, long, long, long);
-DLLEXPORT extern void setflash (float, float, float, long, long, long);
-DLLEXPORT extern void setnormflash (float, float, float, long, long);
+VOXLAP_API extern void sethull3d (point3d *, long, long, long);
+VOXLAP_API extern void setlathe (point3d *, long, long, long);
+VOXLAP_API extern void setblobs (point3d *, long, long, long);
+VOXLAP_API extern void setfloodfill3d (long, long, long, long, long, long, long, long, long);
+VOXLAP_API extern void sethollowfill ();
+VOXLAP_API extern void setkvx (const char *, long, long, long, long, long);
+VOXLAP_API extern void setflash (float, float, float, long, long, long);
+VOXLAP_API extern void setnormflash (float, float, float, long, long);
 
 	//VXL MISC functions:
-DLLEXPORT extern void updatebbox (long, long, long, long, long, long, long);
-DLLEXPORT extern void updatevxl ();
-DLLEXPORT extern void genmipvxl (long, long, long, long);
-DLLEXPORT extern void updatelighting (long, long, long, long, long, long);
+VOXLAP_API extern void updatebbox (long, long, long, long, long, long, long);
+VOXLAP_API extern void updatevxl ();
+VOXLAP_API extern void genmipvxl (long, long, long, long);
+VOXLAP_API extern void updatelighting (long, long, long, long, long, long);
 
 	//Falling voxels functions:
-DLLEXPORT extern void checkfloatinbox (long, long, long, long, long, long);
-DLLEXPORT extern void startfalls ();
-DLLEXPORT extern void dofall (long);
-DLLEXPORT extern long meltfall (vx5sprite *, long, long);
-DLLEXPORT extern void finishfalls ();
+VOXLAP_API extern void checkfloatinbox (long, long, long, long, long, long);
+VOXLAP_API extern void startfalls ();
+VOXLAP_API extern void dofall (long);
+VOXLAP_API extern long meltfall (vx5sprite *, long, long);
+VOXLAP_API extern void finishfalls ();
 
 	//Procedural texture functions:
-DLLEXPORT extern long curcolfunc (lpoint3d *);
-DLLEXPORT extern long floorcolfunc (lpoint3d *);
-DLLEXPORT extern long jitcolfunc (lpoint3d *);
-DLLEXPORT extern long manycolfunc (lpoint3d *);
-DLLEXPORT extern long sphcolfunc (lpoint3d *);
-DLLEXPORT extern long woodcolfunc (lpoint3d *);
-DLLEXPORT extern long pngcolfunc (lpoint3d *);
-DLLEXPORT extern long kv6colfunc (lpoint3d *);
+VOXLAP_API extern long curcolfunc (lpoint3d *);
+VOXLAP_API extern long floorcolfunc (lpoint3d *);
+VOXLAP_API extern long jitcolfunc (lpoint3d *);
+VOXLAP_API extern long manycolfunc (lpoint3d *);
+VOXLAP_API extern long sphcolfunc (lpoint3d *);
+VOXLAP_API extern long woodcolfunc (lpoint3d *);
+VOXLAP_API extern long pngcolfunc (lpoint3d *);
+VOXLAP_API extern long kv6colfunc (lpoint3d *);
 
 	//Editing backup/restore functions
-DLLEXPORT extern void voxbackup (long, long, long, long, long);
-DLLEXPORT extern void voxdontrestore ();
-DLLEXPORT extern void voxrestore ();
-DLLEXPORT extern void voxredraw ();
+VOXLAP_API extern void voxbackup (long, long, long, long, long);
+VOXLAP_API extern void voxdontrestore ();
+VOXLAP_API extern void voxrestore ();
+VOXLAP_API extern void voxredraw ();
 
 	//High-level (easy) picture loading function:
-DLLEXPORT extern void kpzload (const char *, long *, long *, long *, long *);
+VOXLAP_API extern void kpzload (const char *, long *, long *, long *, long *);
 	//Low-level PNG/JPG functions:
-DLLEXPORT extern void kpgetdim (const char *, long, long *, long *);
-DLLEXPORT extern long kprender (const char *, long, long, long, long, long, long, long);
+VOXLAP_API extern void kpgetdim (const char *, long, long *, long *);
+VOXLAP_API extern long kprender (const char *, long, long, long, long, long, long, long);
 
 	//ZIP functions:
-DLLEXPORT extern long kzaddstack (const char *);
-DLLEXPORT extern void kzuninit ();
-DLLEXPORT extern long kzopen (const char *);
-DLLEXPORT extern long kzread (void *, long);
-DLLEXPORT extern long kzfilelength ();
-DLLEXPORT extern long kzseek (long, long);
-DLLEXPORT extern long kztell ();
-DLLEXPORT extern long kzgetc ();
-DLLEXPORT extern long kzeof ();
-DLLEXPORT extern void kzclose ();
+VOXLAP_API extern long kzaddstack (const char *);
+VOXLAP_API extern void kzuninit ();
+VOXLAP_API extern long kzopen (const char *);
+VOXLAP_API extern long kzread (void *, long);
+VOXLAP_API extern long kzfilelength ();
+VOXLAP_API extern long kzseek (long, long);
+VOXLAP_API extern long kztell ();
+VOXLAP_API extern long kzgetc ();
+VOXLAP_API extern long kzeof ();
+VOXLAP_API extern void kzclose ();
 
-DLLEXPORT extern void kzfindfilestart (const char *); //pass wildcard string
-DLLEXPORT extern long kzfindfile (char *); //you alloc buf, returns 1:found,0:~found
+VOXLAP_API extern void kzfindfilestart (const char *); //pass wildcard string
+VOXLAP_API extern long kzfindfile (char *); //you alloc buf, returns 1:found,0:~found
 
 
 #endif

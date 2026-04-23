@@ -66,11 +66,22 @@ target_compile_definitions(voxlap PRIVATE
     WIN32
     _WINDOWS
     _USRDLL
-    # VOXLAP_EXPORTS is how voxlap5.h decides between dllexport (DLL
-    # build) and dllimport (consumer). Kept for source compatibility
-    # with the existing __declspec(dllexport) annotations; Stage 1 step 2
-    # will replace DLLEXPORT with a CMake-generated VOXLAP_API macro.
-    VOXLAP_EXPORTS
+)
+
+# Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to
+# __declspec(dllexport) when building voxlap (CMake auto-defines
+# voxlap_EXPORTS for SHARED targets), __declspec(dllimport) in consumers,
+# and __attribute__((visibility("default"))) on GCC/Clang. Replaces the
+# old unconditional `#define DLLEXPORT __declspec(dllexport)` that broke
+# every non-MSVC compile.
+include(GenerateExportHeader)
+generate_export_header(voxlap
+    BASE_NAME voxlap
+    EXPORT_MACRO_NAME VOXLAP_API
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/voxlap_export.h
+)
+target_include_directories(voxlap PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
 )
 
 if(MSVC)
