@@ -958,56 +958,84 @@ int32_t compilestack (int32_t *uind, int32_t *n0, int32_t *n1, int32_t *n2, int3
 	return(n);
 }
 
-#ifdef _MSC_VER
-
+/* Expand a voxlap slab-list into a 256-bit solidity bitmap.
+ *
+ *   s : pointer into the voxel buffer (vbuf) — first slab's header byte.
+ *       Each slab is a 4-byte header followed by colour data:
+ *         src[0] length-to-next-slab in dwords (0 terminates)
+ *         src[1] top z of the solid run (air→solid transition)
+ *         src[2] bottom z of exposed ceiling (unused here)
+ *         src[3] top z of the air gap BETWEEN this slab and the next
+ *                (solid→air transition seen on the next iteration)
+ *   d : pointer to 8 int32_t (256 bits). Bit k is set iff voxel z=k
+ *       is solid in this column.
+ *
+ * The transition masks:
+ *   xbsflor[k] = -1 << k         (bits k..31 set — air→solid at bit k)
+ *   xbsceil[k] = ~(-1 << k)      (bits 0..k-1 set — solid→air at bit k)
+ * Indexed as [delta + 32] with delta in [-32..-1], so we read
+ * xbs*flor/ceil[0..31] with no cross-array layout assumption (the
+ * original asm's `xbs*[eax*4+128]` relied on the two tables being
+ * allocated adjacent — we don't).
+ *
+ * Past the final slab every z is treated as solid (bottom of the
+ * voxel column).
+ */
 static _inline void expandbit256 (void *s, void *d)
 {
-	_asm
-	{
-		push esi
-		push edi
-		mov esi, s
-		mov edi, d
-		mov ecx, 32   ;current bit index
-		xor edx, edx  ;value of current 32-bit bits
-		jmp short in2it
-begit:lea esi, [esi+eax*4]
-		movzx eax, byte ptr [esi+3]
-		sub eax, ecx              ;xor mask [eax] for ceiling begins
-		jl short xskpc
-xdoc: mov [edi], edx
-		add edi, 4
-		mov edx, -1
-		add ecx, 32
-		sub eax, 32
-		jge short xdoc
-xskpc:and edx, xbsceil[eax*4+128] ;~(-1<<eax); xor mask [eax] for ceiling ends
-in2it:movzx eax, byte ptr [esi+1]
-		sub eax, ecx              ;xor mask [eax] for floor begins
-		jl short xskpf
-xdof: mov [edi], edx
-		add edi, 4
-		xor edx, edx
-		add ecx, 32
-		sub eax, 32
-		jge short xdof
-xskpf:or edx, xbsflor[eax*4+128] ;(-1<<eax); xor mask [eax] for floor ends
-		movzx eax, byte ptr [esi]
-		test eax, eax
-		jnz short begit
-		sub ecx, 256              ;finish writing buffer to [edi]
-		jg short xskpe
-xdoe: mov [edi], edx
-		add edi, 4
-		mov edx, -1
-		add ecx, 32
-		jle short xdoe
-xskpe:pop edi
-		pop esi
-	}
-}
+	const uint8_t *src = (const uint8_t *)s;
+	int32_t *dst = (int32_t *)d;
+	int32_t bitpos = 32;   /* next-word index as (words_written+1)*32 */
+	int32_t word = 0;      /* current output word being assembled */
+	int32_t delta;
+	int32_t nextlen;
 
-#endif
+	/* First iteration starts directly at v[1] of slab 0 — no
+	 * preceding slab whose v[3] we'd need. */
+	goto v1_transition;
+
+	for (;;) {
+		/* Advance to the next slab. */
+		src += (uint32_t)nextlen * 4;
+
+		/* v[3] : solid→air transition. Flush full solid words
+		 * (word = -1) until we land in the word containing v[3],
+		 * then clear bits [delta+32 .. 31] via xbsceil. */
+		delta = (int32_t)src[3] - bitpos;
+		while (delta >= 0) {
+			*dst++ = word;
+			word = -1;
+			bitpos += 32;
+			delta -= 32;
+		}
+		word &= xbsceil[delta + 32];
+
+v1_transition:
+		/* v[1] : air→solid transition. Flush full air words
+		 * (word = 0) until we land in the word containing v[1],
+		 * then set bits [delta+32 .. 31] via xbsflor. */
+		delta = (int32_t)src[1] - bitpos;
+		while (delta >= 0) {
+			*dst++ = word;
+			word = 0;
+			bitpos += 32;
+			delta -= 32;
+		}
+		word |= xbsflor[delta + 32];
+
+		nextlen = (int32_t)src[0];
+		if (nextlen == 0) break;
+	}
+
+	/* Finish: pad the rest of the 256-bit buffer with solid. */
+	bitpos -= 256;
+	if (bitpos > 0) return;
+	do {
+		*dst++ = word;
+		word = -1;
+		bitpos += 32;
+	} while (bitpos <= 0);
+}
 
 void expandbitstack (int32_t x, int32_t y, int64_t *bind)
 {
