@@ -210,6 +210,8 @@ int32_t zbufoff;
 
 #ifdef _MSC_VER
 
+#include <intrin.h>  /* _byteswap_ulong, __cpuid */
+
 #pragma warning(disable:4799) //I know how to use EMMS
 
 static _inline void fcossin (float a, float *c, float *s)
@@ -12573,11 +12575,7 @@ uint32_t pngocrc, pngoadcrc;
 
 static _inline uint32_t bswap (uint32_t a)
 {
-	_asm
-	{
-		mov eax, a
-		bswap eax
-	}
+	return _byteswap_ulong(a);
 }
 
 #endif
@@ -12738,20 +12736,9 @@ static _inline int32_t testflag (int32_t c)
 
 static _inline void cpuid (int32_t a, int32_t *s)
 {
-	_asm
-	{
-		push ebx
-		push esi
-		mov eax, a
-		cpuid
-		mov esi, s
-		mov dword ptr [esi+0], eax
-		mov dword ptr [esi+4], ebx
-		mov dword ptr [esi+8], ecx
-		mov dword ptr [esi+12], edx
-		pop esi
-		pop ebx
-	}
+	/* __cpuid writes EAX/EBX/ECX/EDX into s[0..3] in that order —
+	 * same layout the asm produced. */
+	__cpuid(s, a);
 }
 
 	//Bit numbers of return value:

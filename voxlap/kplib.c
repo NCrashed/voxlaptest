@@ -242,13 +242,11 @@ void cpuid (int32_t, int32_t *);
 
 #elif defined(_MSC_VER) && !defined(NOASM)
 
+#include <intrin.h>  /* _byteswap_ulong, __cpuid */
+
 static _inline uint32_t bswap (uint32_t a)
 {
-	_asm
-	{
-		mov eax, a
-		bswap eax
-	}
+	return _byteswap_ulong(a);
 }
 
 static _inline int32_t bitrev (int32_t b, int32_t c)
@@ -288,20 +286,7 @@ static _inline int32_t testflag (int32_t c)
 
 static _inline void cpuid (int32_t a, int32_t *s)
 {
-	_asm
-	{
-		push ebx
-		push esi
-		mov eax, a
-		cpuid
-		mov esi, s
-		mov dword ptr [esi+0], eax
-		mov dword ptr [esi+4], ebx
-		mov dword ptr [esi+8], ecx
-		mov dword ptr [esi+12], edx
-		pop esi
-		pop ebx
-	}
+	__cpuid(s, a);
 }
 
 #elif defined(__GNUC__) && defined(__i386__) && !defined(NOASM)
