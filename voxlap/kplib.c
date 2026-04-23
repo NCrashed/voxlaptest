@@ -251,37 +251,19 @@ static _inline uint32_t bswap (uint32_t a)
 
 static _inline int32_t bitrev (int32_t b, int32_t c)
 {
-	_asm
-	{
-		mov edx, b
-		mov ecx, c
-		xor eax, eax
- beg: shr edx, 1
-		adc eax, eax
-		sub ecx, 1
-		jnz short beg
-	}
+	int32_t a = 0, i;
+	for (i = 0; i < c; i++) { a = (a << 1) | (b & 1); b = (int32_t)((uint32_t)b >> 1); }
+	return a;
 }
 
 static _inline int32_t testflag (int32_t c)
 {
-	_asm
-	{
-		mov ecx, c
-		pushfd
-		pop eax
-		mov edx, eax
-		xor eax, ecx
-		push eax
-		popfd
-		pushfd
-		pop eax
-		xor eax, edx
-		mov eax, 1
-		jne menostinx
-		xor eax, eax
-		menostinx:
-	}
+	/* Was an EFLAGS ID-bit toggle test for CPUID availability on
+	 * pre-Pentium CPUs. Every x86 CPU from 1993 onward supports
+	 * CPUID; Stage 2 decision 2 dropped runtime SIMD dispatch so
+	 * the answer is only used for diagnostics now. */
+	(void)c;
+	return 1;
 }
 
 static _inline void cpuid (int32_t a, int32_t *s)

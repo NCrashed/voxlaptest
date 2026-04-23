@@ -12715,23 +12715,12 @@ int32_t surroundcapture32bit (dpoint3d *pos, const char *fname, int32_t boxsiz)
 
 static _inline int32_t testflag (int32_t c)
 {
-	_asm
-	{
-		mov ecx, c
-		pushfd
-		pop eax
-		mov edx, eax
-		xor eax, ecx
-		push eax
-		popfd
-		pushfd
-		pop eax
-		xor eax, edx
-		mov eax, 1
-		jne menostinx
-		xor eax, eax
-		menostinx:
-	}
+	/* Was an EFLAGS ID-bit toggle test for CPUID availability on
+	 * pre-Pentium CPUs. Every x86 CPU from 1993 onward supports
+	 * CPUID; Stage 2 decision 2 dropped runtime SIMD dispatch so
+	 * the answer is only used for diagnostics now. */
+	(void)c;
+	return 1;
 }
 
 static _inline void cpuid (int32_t a, int32_t *s)
