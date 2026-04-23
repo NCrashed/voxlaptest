@@ -37,6 +37,7 @@ extern void set_curcol(long v);
 extern void set_jitamount(long v);
 extern void set_colfunc(long (*v)(lpoint3d *));
 extern void set_fogcol(long v);
+extern void set_anginc(long v);
 extern void setMaxScanDistToMax(void);
 
 /* Voxlap's 32-bit colour is packed as (brightness<<24) | (R<<16) | (G<<8) | B.
@@ -63,89 +64,68 @@ static void build_scene(void) {
 
 	loadnul(&ipo, &ist, &ihe, &ifo);
 
-	/* See the whole map. fogcol paints the distance-fog horizon on voxel
-	 * hits (not on rays that escape the world — those need a real sky
-	 * ceiling, built below). */
+	/* See the whole map. */
 	setMaxScanDistToMax();
 	set_fogcol((long)BR(0x87ceeb));
 
-	/* Flatten per-face shading. Voxlap's default darkens each of the six
-	 * voxel faces by a different amount; with our skybox-style enclosure
-	 * those shade differences turn the receding inside faces of the
-	 * perimeter walls into a "columns street" of dark vertical bars.
-	 * The signature is (x-, x+, y-, y+, z-, z+); 0 = no darkening per
-	 * face, matching game.c's uniform-shading preset. */
+	/* Densest angular ray sampling; avoids sub-pixel aliasing against
+	 * distant thin geometry. */
+	set_anginc(1);
+
+	/* Flatten per-face shading so every voxel face reads at full
+	 * brightness (0 = no darkening per face). */
 	setsideshades(0, 0, 0, 0, 0, 0);
 
 	set_colfunc(curcolfunc);
 	set_jitamount(0);
 
-	/* Voxlap paints newly-exposed bedrock surfaces with the current
-	 * curcol. Set it to a cool grey *before* the carve so the ground
-	 * plane reads as stone rather than loadnul's default brown. */
-	set_curcol((long)BR(0x606878));
-
-	/* Voxlap's +Z is down (z=0 is the top boundary, MAXZDIM-1 is deepest).
-	 * Carve the whole map — edge-to-edge so we don't leave a solid border
-	 * of map-boundary columns as needle-like silhouettes in the distance,
-	 * and all the way up to z=0 so we can rebuild a clean sky layer. */
-	a.x = 0;         a.y = 0;         a.z = 0;
-	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 189;
+	/* Earlier attempts rebuilt the sky as one-voxel-thick inserted slabs
+	 * across the whole map, then added one-voxel-thick perimeter walls.
+	 * Both aliased badly: at 1000+ voxels distance a 1-voxel surface is
+	 * sub-pixel, so the raycaster alternately hits and misses it — that
+	 * produced the thick curved black arcs on the sides and the thin
+	 * vertical lattice in the centre of the previous north.png.
+	 *
+	 * Don't rebuild anything. Just carve a smaller playable box in the
+	 * middle of the map and let the surrounding *untouched* solid region
+	 * (hundreds of voxels thick on every side) serve as ceiling, floor,
+	 * and walls. The carve exposes the inside faces of that solid, all
+	 * painted with whatever curcol is when setrect runs. Thick solid
+	 * geometry has no sub-pixel aliasing. */
+	set_curcol((long)BR(0x87ceeb));
+	a.x = 800;   a.y = 800;   a.z = 5;
+	b.x = 1248;  b.y = 1248;  b.z = 189;
 	setrect(&a, &b, -1);
 
-	/* Wrap the playable volume in a sky-blue "skybox" so no ray escapes
-	 * through a world boundary and returns black. fogcol handles voxel
-	 * hits at the scan horizon; this covers the boundary-escape case
-	 * that produced the black horizon band and 1/sin(x)-shaped spikes
-	 * from grazing rays at the map edges. */
-	set_curcol((long)BR(0x87ceeb));
-
-	/* Ceiling at z=0, the full map */
-	a.x = 0;         a.y = 0;         a.z = 0;
-	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 0;
-	setrect(&a, &b, 0);
-
-	/* West wall (x=0) */
-	a.x = 0;         a.y = 0;         a.z = 1;
-	b.x = 0;         b.y = VSID - 1;  b.z = 189;
-	setrect(&a, &b, 0);
-
-	/* East wall (x=VSID-1) */
-	a.x = VSID - 1;  a.y = 0;         a.z = 1;
-	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 189;
-	setrect(&a, &b, 0);
-
-	/* South wall (y=0) */
-	a.x = 0;         a.y = 0;         a.z = 1;
-	b.x = VSID - 1;  b.y = 0;         b.z = 189;
-	setrect(&a, &b, 0);
-
-	/* North wall (y=VSID-1) */
-	a.x = 0;         a.y = VSID - 1;  a.z = 1;
-	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 189;
-	setrect(&a, &b, 0);
-
-	/* Reset the brush for shape insertion below. */
+	/* Insert a grey floor slab just above the natural bedrock so looking
+	 * down reads as stone rather than sky-blue. 5 voxels thick, filling
+	 * the playable footprint. Top surface at z=185 (exposed) is what the
+	 * camera sees; below that is buried. */
 	set_curcol((long)BR(0x606878));
+	a.x = 800;   a.y = 800;   a.z = 185;
+	b.x = 1248;  b.y = 1248;  b.z = 189;
+	setrect(&a, &b, 0);
+
+	/* Shapes sit on top of the grey floor (top surface z=185). */
 
 	/* Red pillar */
-	a.x = 1010; a.y = 1090; a.z = 160;
-	b.x = 1020; b.y = 1100; b.z = 189;
+	a.x = 1010; a.y = 1090; a.z = 155;
+	b.x = 1020; b.y = 1100; b.z = 184;
 	setRectOneColor(&a, &b, (long)BR(0xff3030));
 
 	/* Green cube */
-	a.x = 1030; a.y = 1050; a.z = 180;
-	b.x = 1040; b.y = 1060; b.z = 189;
+	a.x = 1030; a.y = 1050; a.z = 175;
+	b.x = 1040; b.y = 1060; b.z = 184;
 	setRectOneColor(&a, &b, (long)BR(0x30c030));
 
 	/* Blue flat tile */
-	a.x = 1000; a.y = 1030; a.z = 188;
-	b.x = 1050; b.y = 1070; b.z = 189;
+	a.x = 1000; a.y = 1030; a.z = 183;
+	b.x = 1050; b.y = 1070; b.z = 184;
 	setRectOneColor(&a, &b, (long)BR(0x3060ff));
 
 	/* Yellow sphere. setsphere reads its colour from vx5.curcol. */
 	set_curcol((long)BR(0xffd050));
-	c.x = 1060; c.y = 1040; c.z = 183;
+	c.x = 1060; c.y = 1040; c.z = 178;
 	setsphere(&c, 8, 0);
 
 	updatevxl();
