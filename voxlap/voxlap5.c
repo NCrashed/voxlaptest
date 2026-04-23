@@ -214,28 +214,18 @@ int32_t zbufoff;
 
 static _inline void fcossin (float a, float *c, float *s)
 {
-	_asm
-	{
-		fld a
-		fsincos
-		mov eax, c
-		fstp dword ptr [eax]
-		mov eax, s
-		fstp dword ptr [eax]
-	}
+	/* The original x87 fsincos produces both results from one
+	 * microcoded op; modern compilers recognise the cosf+sinf pair
+	 * and merge them into a libm sincosf where available. Results
+	 * may not be bit-identical to fsincos on the same MSVC build. */
+	*c = cosf(a);
+	*s = sinf(a);
 }
 
 static _inline void dcossin (double a, double *c, double *s)
 {
-	_asm
-	{
-		fld a
-		fsincos
-		mov eax, c
-		fstp qword ptr [eax]
-		mov eax, s
-		fstp qword ptr [eax]
-	}
+	*c = cos(a);
+	*s = sin(a);
 }
 
 static _inline void ftol (float f, int32_t *a)
