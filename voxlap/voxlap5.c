@@ -24,9 +24,12 @@
 #include <string.h>
 #include <conio.h>
 #include <dos.h>
-#define MAX_PATH 260
 #endif
 #include <stdlib.h>
+
+/* Engine-internal path-length constant. Deliberately not MAX_PATH: we
+ * don't want a name collision with windows.h nor a dependency on it. */
+#define VOXLAP_MAX_PATH 260
  
 extern char keystatus[256];
 extern void readkeyboard ();
@@ -4660,7 +4663,7 @@ void loadnul (dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe, dpoint3d *ifo)
 long loaddta (const char *filename, dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe, dpoint3d *ifo)
 {
 	long i, j, p, leng, minz = 255, maxz = 0, h[5], longpal[256];
-	char dat, *dtahei, *dtacol, *v, dafilename[MAX_PATH];
+	char dat, *dtahei, *dtacol, *v, dafilename[VOXLAP_MAX_PATH];
 	float f;
 	FILE *fp;
 
@@ -10799,7 +10802,7 @@ kfatype *getkfa (const char *kfanam)
 	kv6voxtype *v, *ov, *ve;
 	kv6data *kv;
 	long i, j, x, y;
-	char *cptr, snotbuf[MAX_PATH];
+	char *cptr, snotbuf[VOXLAP_MAX_PATH];
 
 	if (inkhash(kfanam,&i)) return(*(kfatype **)&khashbuf[i+4]);
 	if (i == -1) return(0);

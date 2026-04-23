@@ -2947,14 +2947,16 @@ long kzopen (const char *filnam)
 
 // --------------------------------------------------------------------------
 
+/* Engine-internal path-length constant. Not named MAX_PATH so it
+ * doesn't shadow or depend on the windows.h one. */
+#define VOXLAP_MAX_PATH 260
+
 #if defined(__DOS__)
-#define MAX_PATH 260
 static struct find_t findata;
 #elif defined(_WIN32)
 static HANDLE hfind = INVALID_HANDLE_VALUE;
 static WIN32_FIND_DATA findata;
 #else
-#define MAX_PATH 260
 static DIR *hfind = NULL;
 static struct dirent *findata = NULL;
 #endif
@@ -2967,7 +2969,7 @@ static struct dirent *findata = NULL;
 	//   0,1,2,3,4              100
 	//   0,1,2,3,4              -1
 static long srchstat = -1, srchzoff = 0, srchdoff = -1, wildstpathleng;
-static char wildst[MAX_PATH] = "", newildst[MAX_PATH] = "";
+static char wildst[VOXLAP_MAX_PATH] = "", newildst[VOXLAP_MAX_PATH] = "";
 
 void kzfindfilestart (const char *st)
 {

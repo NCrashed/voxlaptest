@@ -3,7 +3,15 @@
 #include <stdlib.h>
 
 VOXLAP_API long getVSID() { return VSID; }
-VOXLAP_API void setMaxScanDistToMax() { vx5.maxscandist = (long)(VSID*sqrt(2)); }
+VOXLAP_API void setMaxScanDistToMax() {
+	/* Clamp to voxlap5.c's documented ceiling of 2047 (see the comment
+	 * on vx5.maxscandist initialisation). Upstream Voxlap used VSID=1024
+	 * so VSID*sqrt(2) ~1448 fit inside 2047; this fork's VSID=2048 makes
+	 * the raw value ~2896, which overflows the raycaster and renders
+	 * specific ray columns as black. */
+	long v = (long)(VSID * sqrt(2));
+	vx5.maxscandist = (v > 2047) ? 2047 : v;
+}
 VOXLAP_API void setMipUse(long amount) { vx5.vxlmipuse = amount; }
 
 VOXLAP_API void setRectOneColor(lpoint3d* hit1, lpoint3d* hit2, long ARGB)
