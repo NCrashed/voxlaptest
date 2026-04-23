@@ -592,7 +592,7 @@ void print6x8 (int32_t x, int32_t y, int32_t fcol, int32_t bcol, const char *fmt
 		for(j=1;j<256;y+=bytesperline,j<<=1)
 			for(c=st,x=y;*c;c++,x+=24)
 			{
-				v = (char *)(((int32_t)font6x8) + ((int32_t)c[0])*6);
+				v = (char *)(((intptr_t)font6x8) + ((int32_t)c[0])*6);
 				if (v[0]&j) *(int32_t *)(x   ) = fcol;
 				if (v[1]&j) *(int32_t *)(x+ 4) = fcol;
 				if (v[2]&j) *(int32_t *)(x+ 8) = fcol;
@@ -607,7 +607,7 @@ void print6x8 (int32_t x, int32_t y, int32_t fcol, int32_t bcol, const char *fmt
 	for(j=1;j<256;y+=bytesperline,j<<=1)
 		for(c=st,x=y;*c;c++,x+=24)
 		{
-			v = (char *)(((int32_t)font6x8) + ((int32_t)c[0])*6);
+			v = (char *)(((intptr_t)font6x8) + ((int32_t)c[0])*6);
 			*(int32_t *)(x   ) = (((-(v[0]&j))>>31)&fcol)+bcol;
 			*(int32_t *)(x+ 4) = (((-(v[1]&j))>>31)&fcol)+bcol;
 			*(int32_t *)(x+ 8) = (((-(v[2]&j))>>31)&fcol)+bcol;
@@ -821,7 +821,7 @@ static int32_t slng (const char *s)
 	const char *v;
 
 	for(v=s;v[0];v+=v[0]*4);
-	return((intptr_t)v-(int32_t)s+(v[2]-v[1]+1)*4+4);
+	return((intptr_t)v-(intptr_t)s+(v[2]-v[1]+1)*4+4);
 }
 
 void voxdealloc (const char *v)
@@ -1239,7 +1239,7 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 	}
 
 	//resp = 0;
-	grouscanasm((int32_t)gstartv);
+	grouscanasm((intptr_t)gstartv);
 	//if (resp)
 	//{
 	//   static char tempbuf[2048], tempbuf2[256];
@@ -1337,7 +1337,7 @@ afterdelete:;
 		gy = gylookup[v[v[0]*4+3]];
 		if (dmulrethigh(gy,c->cx1,c->cy1,ogx) < 0)
 		{
-			col = (int32_t)c->i1; dax = c->cx1; day = c->cy1;
+			col = (intptr_t)c->i1; dax = c->cx1; day = c->cy1;
 			while (dmulrethigh(gylookup[v[2]+1],dax,day,ogx) < 0)
 				{ col -= sizeof(castdat); dax -= gi0; day -= gi1; }
 			ce++; if (ce >= &cf[192]) return; //Give it max=64 entries like ASM
@@ -4780,7 +4780,7 @@ int32_t loadpng (const char *filename, dpoint3d *ipo, dpoint3d *ist, dpoint3d *i
 
 	kpgetdim(buf,leng,&i,&j); if ((i != VSID) && (j != VSID)) { free(buf); return(0); }
 	pngdat = (uint32_t *)(&vbuf[(VOXSIZ-VSID*VSID*4)>>2]);
-	if (kprender(buf,leng,(int32_t)pngdat,VSID<<2,VSID,VSID,0,0) < 0) return(0);
+	if (kprender(buf,leng,(intptr_t)pngdat,VSID<<2,VSID,VSID,0,0) < 0) return(0);
 	free(buf);
 
 	for(i=0;i<VSID*VSID;i++)
@@ -5094,7 +5094,7 @@ int32_t loadsky (const char *skyfilnam)
 loadbluesky:;
 			//Load default sky
 		skyxsiz = 512; skyysiz = 1; skybpl = skyxsiz*4;
-		if (!(skypic = (int32_t)malloc(skyysiz*skybpl))) return(-1);
+		if (!(skypic = (intptr_t)malloc(skyysiz*skybpl))) return(-1);
 
 		p = (int32_t *)skypic; y = skyxsiz*skyxsiz;
 		for(x=0;x<=(skyxsiz>>1);x++)
@@ -6847,9 +6847,9 @@ void tmaphulltrisortho (point3d *pt)
 	for(k=0;k<tricnt;k++)
 	{
 		if (nm[k].z >= 0)
-			{ damost = (int32_t)umost; incmod3[0] = 1; incmod3[1] = 2; incmod3[2] = 0; }
+			{ damost = (intptr_t)umost; incmod3[0] = 1; incmod3[1] = 2; incmod3[2] = 0; }
 		else
-			{ damost = (int32_t)dmost; incmod3[0] = 2; incmod3[1] = 0; incmod3[2] = 1; }
+			{ damost = (intptr_t)dmost; incmod3[0] = 2; incmod3[1] = 0; incmod3[2] = 1; }
 
 		itop = (pt[tri[(k<<2)+1]].y < pt[tri[k<<2]].y); ibot = 1-itop;
 			  if (pt[tri[(k<<2)+2]].y < pt[tri[(k<<2)+itop]].y) itop = 2;
@@ -6936,7 +6936,7 @@ void sethull3d (point3d *pt, int32_t nump, int32_t dacol, int32_t bakit)
 
 	for(y=ys;y<=ye;y++)
 		for(x=xs;x<=xe;x++)
-			modslab(scum2(x,y),(int32_t)umost[y*VSID+x],(int32_t)dmost[y*VSID+x]);
+			modslab(scum2(x,y),(intptr_t)umost[y*VSID+x],(intptr_t)dmost[y*VSID+x]);
 	scum2finish();
 	updatebbox(vx5.minx,vx5.miny,vx5.minz,vx5.maxx,vx5.maxy,vx5.maxz,dacol);
 }
@@ -7753,7 +7753,7 @@ static void initpathash ()
 {
 	patbuf = (lpoint2d *)radar;
 	pathashead = (int32_t *)(((intptr_t)patbuf)+(1<<LPATBUFSIZ)*sizeof(lpoint2d));
-	pathashdat = (lpoint3d *)(((int32_t)pathashead)+((1<<LPATHASHSIZ)*4));
+	pathashdat = (lpoint3d *)(((intptr_t)pathashead)+((1<<LPATHASHSIZ)*4));
 	pathashmax = ((max((MAXXDIM*MAXYDIM*27)>>1,(VSID+4)*3*256*4)-((1<<LPATBUFSIZ)*sizeof(lpoint2d))-(1<<LPATHASHSIZ)*4)/12);
 	memset(pathashead,-1,(1<<LPATHASHSIZ)*4);
 	pathashcnt = 0;
@@ -8886,9 +8886,9 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 				do
 				{
 					f = 1.f/(dx*(float)sx + dy*(float)sy + db);
-					if (f < *(float *)(((int32_t)p)+zbufoff))
+					if (f < *(float *)(((intptr_t)p)+zbufoff))
 					{
-						*(float *)(((int32_t)p)+zbufoff) = f;
+						*(float *)(((intptr_t)p)+zbufoff) = f;
 						ftol((ux*(float)sx + uy*(float)sy + ub)*f-.5,&iu);
 						ftol((vx*(float)sx + vy*(float)sy + vb)*f-.5,&iv);
 						if ((uint32_t)iu >= rxsiz) iu = 0;
@@ -8947,13 +8947,13 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 					femms
 	  dpqendit:
 				}
-				distlutoffs = ((int32_t)dpqdistlut)-((int32_t)p);
+				distlutoffs = ((intptr_t)dpqdistlut)-((intptr_t)p);
 				do
 				{
 #if (USEZBUFFER != 0)
-					if (*(int32_t *)(((int32_t)p)+zbufoff) > *(int32_t *)(((int32_t)p)+distlutoffs))
+					if (*(int32_t *)(((intptr_t)p)+zbufoff) > *(int32_t *)(((intptr_t)p)+distlutoffs))
 					{
-						*(int32_t *)(((int32_t)p)+zbufoff) = *(int32_t *)(((int32_t)p)+distlutoffs);
+						*(int32_t *)(((intptr_t)p)+zbufoff) = *(int32_t *)(((intptr_t)p)+distlutoffs);
 #endif
 						if ((uint32_t)iu < uvmax) p[0] = *(int32_t *)(rpic+iu);
 #if (USEZBUFFER != 0)
@@ -9278,7 +9278,7 @@ kv6data *genmipkv6 (kv6data *kv6)
 	nkv6->namoff = 0;
 	nkv6->lowermip = 0;
 
-	xptr = (int32_t *)(((int32_t)nkv6) + sizeof(kv6data));
+	xptr = (int32_t *)(((intptr_t)nkv6) + sizeof(kv6data));
 	xyptr = (unsigned short *)(((intptr_t)xptr) + (xs<<2));
 	voxptr = (kv6voxtype *)(((intptr_t)xyptr) + xysiz);
 	n = 0;
@@ -9354,9 +9354,9 @@ kv6data *genmipkv6 (kv6data *kv6)
 
 	nkv6->leng = sizeof(kv6data) + (xs<<2) + xysiz + n*sizeof(kv6voxtype);
 	nkv6 = (kv6data *)realloc(nkv6,nkv6->leng); if (!nkv6) return(0);
-	nkv6->xlen = (uint32_t *)(((int32_t)nkv6) + sizeof(kv6data));
-	nkv6->ylen = (unsigned short *)(((int32_t)nkv6->xlen) + (xs<<2));
-	nkv6->vox = (kv6voxtype *)(((int32_t)nkv6->ylen) + xysiz);
+	nkv6->xlen = (uint32_t *)(((intptr_t)nkv6) + sizeof(kv6data));
+	nkv6->ylen = (unsigned short *)(((intptr_t)nkv6->xlen) + (xs<<2));
+	nkv6->vox = (kv6voxtype *)(((intptr_t)nkv6->ylen) + xysiz);
 	nkv6->numvoxs = n;
 	kv6->lowermip = nkv6;
 	return(nkv6);
@@ -9398,7 +9398,7 @@ static kv6data *loadkv6 (const char *filnam)
 		newkv6->numvoxs = 0;
 		newkv6->namoff = 0;
 		newkv6->lowermip = 0;
-		newkv6->vox = (kv6voxtype *)(((int32_t)newkv6)+sizeof(kv6data));
+		newkv6->vox = (kv6voxtype *)(((intptr_t)newkv6)+sizeof(kv6data));
 		newkv6->xlen = (uint32_t *)newkv6->vox;
 		newkv6->ylen = (unsigned short *)newkv6->xlen;
 		return(newkv6);
@@ -9409,15 +9409,15 @@ static kv6data *loadkv6 (const char *filnam)
 	i = tk.numvoxs*sizeof(kv6voxtype) + tk.xsiz*4 + tk.xsiz*tk.ysiz*2;
 	newkv6 = (kv6data *)malloc(i+sizeof(kv6data));
 	if (!newkv6) { kzclose(); return(0); }
-	if (((int32_t)newkv6)&3) evilquit("getkv6 malloc not 32-bit aligned!");
+	if (((intptr_t)newkv6)&3) evilquit("getkv6 malloc not 32-bit aligned!");
 
 	newkv6->leng = i+sizeof(kv6data);
 	memcpy(&newkv6->xsiz,&tk.xsiz,28);
 	newkv6->namoff = 0;
 	newkv6->lowermip = 0;
-	newkv6->vox = (kv6voxtype *)(((int32_t)newkv6)+sizeof(kv6data));
-	newkv6->xlen = (uint32_t *)(((int32_t)newkv6->vox)+tk.numvoxs*sizeof(kv6voxtype));
-	newkv6->ylen = (unsigned short *)(((int32_t)newkv6->xlen) + tk.xsiz*4);
+	newkv6->vox = (kv6voxtype *)(((intptr_t)newkv6)+sizeof(kv6data));
+	newkv6->xlen = (uint32_t *)(((intptr_t)newkv6->vox)+tk.numvoxs*sizeof(kv6voxtype));
+	newkv6->ylen = (unsigned short *)(((intptr_t)newkv6->xlen) + tk.xsiz*4);
 
 	kzread((void *)newkv6->vox,i);
 	kzclose();
@@ -10649,11 +10649,11 @@ static void floodsucksprite (vx5sprite *spr, kv6data *kv, int32_t ox, int32_t oy
 
 	x0 = x1 = ox; y0 = y1 = oy; z0 = v0->z; z1 = v1->z;
 
-	n = (((int32_t)v1)-((int32_t)v0))/sizeof(kv6voxtype)+1;
+	n = (((intptr_t)v1)-((intptr_t)v0))/sizeof(kv6voxtype)+1;
 	v1->vis &= ~64;
 
 	vfifo[0] = ox; vfifo[1] = oy;
-	vfifo[2] = (int32_t)v0; vfifo[3] = (int32_t)v1;
+	vfifo[2] = (intptr_t)v0; vfifo[3] = (int32_t)v1;
 	vfif0 = 0; vfif1 = 4;
 
 	while (vfif0 < vfif1)
@@ -10701,8 +10701,8 @@ static void floodsucksprite (vx5sprite *spr, kv6data *kv, int32_t ox, int32_t oy
 						goto floodsuckend;
 					}
 					vfifo[i] = x; vfifo[i+1] = y;
-					vfifo[i+2] = (int32_t)ov; vfifo[i+3] = (int32_t)v;
-					n += (((intptr_t)v)-((int32_t)ov))/sizeof(kv6voxtype)+1;
+					vfifo[i+2] = (intptr_t)ov; vfifo[i+3] = (intptr_t)v;
+					n += (((intptr_t)v)-((intptr_t)ov))/sizeof(kv6voxtype)+1;
 					v->vis &= ~64;
 				}
 			}
@@ -10723,7 +10723,7 @@ floodsuckend:;
 	kv6->numvoxs = n;
 	kv6->namoff = 0;
 	kv6->lowermip = 0;
-	kv6->vox = (kv6voxtype *)(((int32_t)kv6)+sizeof(kv6data));
+	kv6->vox = (kv6voxtype *)(((intptr_t)kv6)+sizeof(kv6data));
 	kv6->xlen = (uint32_t *)(((int32_t)kv6->vox)+n*sizeof(kv6voxtype));
 	kv6->ylen = (unsigned short *)(((int32_t)kv6->xlen)+(x1-x0)*4);
 
@@ -11490,8 +11490,8 @@ void setkv6 (vx5sprite *spr, int32_t dacol)
 
 	shpit = bx1-bx0; i = (by1-by0)*shpit*sizeof(shead[0]);
 		//Make sure to use array that's big enough: umost is 1MB
-	shead = (int32_t *)(((int32_t)umost) - (by0*shpit+bx0)*sizeof(shead[0]));
-	slst = (slstype *)(((int32_t)umost)+i);
+	shead = (int32_t *)(((intptr_t)umost) - (by0*shpit+bx0)*sizeof(shead[0]));
+	slst = (slstype *)(((intptr_t)umost)+i);
 	scnt = 1; sstop = (sizeof(umost)-i)/sizeof(slstype);
 	memset(umost,0,i);
 
@@ -11582,7 +11582,7 @@ void setkv6 (vx5sprite *spr, int32_t dacol)
 	if (xi < 0) v0 = kv->vox+kv->numvoxs; else v0 = kv->vox;
 	for(x=x0;x!=x1;x+=xi)
 	{
-		i = (int32_t)kv->xlen[x];
+		i = (intptr_t)kv->xlen[x];
 		if (xi < 0) v0 -= i;
 		if (yi < 0) v1 = v0+i; else v1 = v0;
 		if (xi >= 0) v0 += i;
@@ -11749,7 +11749,7 @@ int32_t meltsphere (vx5sprite *spr, lpoint3d *hit, int32_t hitrad)
 	x = xe-xs+1; y = ye-ys+1; z = ze-zs+1;
 
 	j = sizeof(kv6data) + numvoxs*sizeof(kv6voxtype) + x*4 + x*y*2;
-	i = (int32_t)malloc(j); if (!i) return(0); if (i&3) { free((void *)i); return(0); }
+	i = (intptr_t)malloc(j); if (!i) return(0); if (i&3) { free((void *)i); return(0); }
 	spr->voxnum = kv = (kv6data *)i; spr->flags = 0;
 	kv->leng = j;
 	kv->xsiz = x;
@@ -11761,9 +11761,9 @@ int32_t meltsphere (vx5sprite *spr, lpoint3d *hit, int32_t hitrad)
 	kv->numvoxs = numvoxs;
 	kv->namoff = 0;
 	kv->lowermip = 0;
-	kv->vox = (kv6voxtype *)((int32_t)spr->voxnum+sizeof(kv6data));
-	kv->xlen = (uint32_t *)(((int32_t)kv->vox)+numvoxs*sizeof(kv6voxtype));
-	kv->ylen = (unsigned short *)(((int32_t)kv->xlen) + kv->xsiz*4);
+	kv->vox = (kv6voxtype *)((intptr_t)spr->voxnum+sizeof(kv6data));
+	kv->xlen = (uint32_t *)(((intptr_t)kv->vox)+numvoxs*sizeof(kv6voxtype));
+	kv->ylen = (unsigned short *)(((intptr_t)kv->xlen) + kv->xsiz*4);
 
 	voxptr = kv->vox; numvoxs = 0;
 	xlenptr = kv->xlen; oxvoxs = 0;
@@ -11851,7 +11851,7 @@ int32_t meltspans (vx5sprite *spr, vspans *lst, int32_t lstnum, lpoint3d *offs)
 	x = xe-xs+1; y = ye-ys+1; z = ze-zs;
 
 	j = sizeof(kv6data) + numvoxs*sizeof(kv6voxtype) + y*4 + x*y*2;
-	i = (int32_t)malloc(j); if (!i) return(0); if (i&3) { free((void *)i); return(0); }
+	i = (intptr_t)malloc(j); if (!i) return(0); if (i&3) { free((void *)i); return(0); }
 	spr->voxnum = kv = (kv6data *)i; spr->flags = 0;
 	kv->leng = j;
 	kv->xsiz = y;
@@ -11863,9 +11863,9 @@ int32_t meltspans (vx5sprite *spr, vspans *lst, int32_t lstnum, lpoint3d *offs)
 	kv->numvoxs = numvoxs;
 	kv->namoff = 0;
 	kv->lowermip = 0;
-	kv->vox = (kv6voxtype *)((int32_t)spr->voxnum+sizeof(kv6data));
-	kv->xlen = (uint32_t *)(((int32_t)kv->vox)+numvoxs*sizeof(kv6voxtype));
-	kv->ylen = (unsigned short *)(((int32_t)kv->xlen) + kv->xsiz*4);
+	kv->vox = (kv6voxtype *)((intptr_t)spr->voxnum+sizeof(kv6data));
+	kv->xlen = (uint32_t *)(((intptr_t)kv->vox)+numvoxs*sizeof(kv6voxtype));
+	kv->ylen = (unsigned short *)(((intptr_t)kv->xlen) + kv->xsiz*4);
 
 	voxptr = kv->vox; numvoxs = 0;
 	xlenptr = kv->xlen; oxvoxs = 0;
@@ -12214,9 +12214,9 @@ int32_t isnewfloating (flstboxtype *flb)
 		if (p.z < v[3]) break;
 	}
 
-	if (isnewfloatingot((int32_t)ov) >= 0) return(0);
+	if (isnewfloatingot((intptr_t)ov) >= 0) return(0);
 	ovlstcnt = vlstcnt;
-	isnewfloatingadd((int32_t)ov);
+	isnewfloatingadd((intptr_t)ov);
 	if (vlstcnt >= VLSTSIZ) return(0); //EVIL HACK TO PREVENT CRASH!
 
 		//Init: centroid, mass, bounding box
@@ -12262,12 +12262,12 @@ int32_t isnewfloating (flstboxtype *flb)
 				}
 				ov = v; v += v[0]*4; //NOTE: this is a 'different' ov
 				if ((ov[1] > z1) || (z0 > v[3])) continue; //26-connectivity
-				j = isnewfloatingot((int32_t)ov);
+				j = isnewfloatingot((intptr_t)ov);
 				if (j < 0)
 				{
-					isnewfloatingadd((int32_t)ov);
+					isnewfloatingadd((intptr_t)ov);
 					if (vlstcnt >= VLSTSIZ) return(0); //EVIL HACK TO PREVENT CRASH!
-					fstk[fend].x = nx; fstk[fend].y = ny; fstk[fend].z = (int32_t)ov;
+					fstk[fend].x = nx; fstk[fend].y = ny; fstk[fend].z = (intptr_t)ov;
 					fend++; if (fend >= FSTKSIZ) return(0); //EVIL HACK TO PREVENT CRASH!
 					continue;
 				}
@@ -12393,7 +12393,7 @@ int32_t meltfall (vx5sprite *spr, int32_t fi, int32_t delvxl)
 	x = xe-xs+1; y = ye-ys+1; z = ze-zs+1;
 
 	j = sizeof(kv6data) + numvoxs*sizeof(kv6voxtype) + x*4 + x*y*2;
-	i = (int32_t)malloc(j); if (!i) return(0); if (i&3) { free((void *)i); return(0); }
+	i = (intptr_t)malloc(j); if (!i) return(0); if (i&3) { free((void *)i); return(0); }
 	spr->voxnum = kv = (kv6data *)i; spr->flags = 0;
 	kv->leng = j;
 	kv->xsiz = x;
@@ -12405,9 +12405,9 @@ int32_t meltfall (vx5sprite *spr, int32_t fi, int32_t delvxl)
 	kv->numvoxs = numvoxs;
 	kv->namoff = 0;
 	kv->lowermip = 0;
-	kv->vox = (kv6voxtype *)((int32_t)spr->voxnum+sizeof(kv6data));
-	kv->xlen = (uint32_t *)(((int32_t)kv->vox)+numvoxs*sizeof(kv6voxtype));
-	kv->ylen = (unsigned short *)(((int32_t)kv->xlen) + kv->xsiz*4);
+	kv->vox = (kv6voxtype *)((intptr_t)spr->voxnum+sizeof(kv6data));
+	kv->xlen = (uint32_t *)(((intptr_t)kv->vox)+numvoxs*sizeof(kv6voxtype));
+	kv->ylen = (unsigned short *)(((intptr_t)kv->xlen) + kv->xsiz*4);
 
 	voxptr = kv->vox; numvoxs = 0;
 	xlenptr = kv->xlen; oxvoxs = 0;
@@ -12466,13 +12466,13 @@ int32_t meltfall (vx5sprite *spr, int32_t fi, int32_t delvxl)
 				if (delvxl) //Quick&dirty dealloc from VXL (bad for holes!)
 				{
 						//invalidate current vptr safely
-					isnewfloatingchg((int32_t)v,0);
+					isnewfloatingchg((intptr_t)v,0);
 
 					k = nv-v; //perform slng(nv) and adjust vlst at same time
 					for(ov=nv;ov[0];ov+=ov[0]*4)
-						isnewfloatingchg((int32_t)ov,((int32_t)ov)-k);
+						isnewfloatingchg((intptr_t)ov,((intptr_t)ov)-k);
 
-					j = (int32_t)ov-(int32_t)nv+(ov[2]-ov[1]+1)*4+4;
+					j = (intptr_t)ov-(intptr_t)nv+(ov[2]-ov[1]+1)*4+4;
 
 						//shift end of RLE column up
 					v[0] = nv[0]; v[1] = nv[1]; v[2] = nv[2];
@@ -12515,13 +12515,13 @@ int32_t meltfall (vx5sprite *spr, int32_t fi, int32_t delvxl)
 						//Quick&dirty dealloc from VXL (bad for holes!)
 
 						//invalidate current vptr safely
-					isnewfloatingchg((int32_t)v,0);
+					isnewfloatingchg((intptr_t)v,0);
 
 					k = nv-v; //perform slng(nv) and adjust vlst at same time
 					for(ov=nv;ov[0];ov+=ov[0]*4)
-						isnewfloatingchg((int32_t)ov,((int32_t)ov)-k);
+						isnewfloatingchg((intptr_t)ov,((intptr_t)ov)-k);
 
-					j = (int32_t)ov-(int32_t)nv+(ov[2]-ov[1]+1)*4+4;
+					j = (intptr_t)ov-(intptr_t)nv+(ov[2]-ov[1]+1)*4+4;
 
 						//shift end of RLE column up
 					v[0] = nv[0]; v[1] = nv[1]; v[2] = nv[2];
@@ -12607,7 +12607,7 @@ void voxsetframebuffer (intptr_t p, int32_t b, int32_t x, int32_t y)
 		//WARNING: Pentium 4's L2 cache has severe slowdowns when 65536-64 <= (zbufoff&65535) < 64
 	zbufoff = (((((intptr_t)zbuffermem)-frameplace-128)+255)&~255)+128;
 #endif
-	uurend = &uurendmem[((frameplace&4)^(((int32_t)uurendmem)&4))>>2];
+	uurend = &uurendmem[((frameplace&4)^(((intptr_t)uurendmem)&4))>>2];
 
 	if (vx5.fogcol >= 0)
 	{
@@ -12962,7 +12962,7 @@ int32_t initvoxlap ()
 	  //WARNING: xres&yres are local to VOXLAP5.C so don't rely on them here!
 	if (!(radarmem = (int32_t *)malloc(max((((MAXXDIM*MAXYDIM*27)>>1)+7)&~7,(VSID+4)*3*SCPITCH*4+8))))
 		return(-1);
-	radar = (int32_t *)((((int32_t)radarmem)+7)&~7);
+	radar = (int32_t *)((((intptr_t)radarmem)+7)&~7);
 
 	for(i=0;i<32;i++) { xbsflor[i] = (-1<<i); xbsceil[i] = ~xbsflor[i]; }
 

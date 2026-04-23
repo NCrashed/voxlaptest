@@ -2421,8 +2421,8 @@ static int32_t kddsrend (const char *buf, int32_t leng,
 	for(y=0;y<ysiz;y+=4,buf+=stride)
 		for(x=0;x<xsiz;x+=4)
 		{
-			if (dxt == 1) uptr = (unsigned char *)(((int32_t)buf)+(x<<1));
-						else uptr = (unsigned char *)(((int32_t)buf)+(x<<2)+8);
+			if (dxt == 1) uptr = (unsigned char *)(((intptr_t)buf)+(x<<1));
+						else uptr = (unsigned char *)(((intptr_t)buf)+(x<<2)+8);
 			c0 = SSWAPIB(*(unsigned short *)&uptr[0]);
 			r[0] = ((c0>>8)&0xf8); g[0] = ((c0>>3)&0xfc); b[0] = ((c0<<3)&0xfc); a[0] = 255;
 			c1 = SSWAPIB(*(unsigned short *)&uptr[2]);
@@ -3392,7 +3392,7 @@ VOXLAP_API extern void kpzload (const char *filnam, int32_t *pic, int32_t *bpl, 
 
 	kpgetdim(buf,leng,xsiz,ysiz);
 	(*bpl) = ((*xsiz)<<2);
-	(*pic) = (int32_t)malloc((*ysiz)*(*bpl)); if (!(*pic)) { free(buf); return; }
+	(*pic) = (intptr_t)malloc((*ysiz)*(*bpl)); if (!(*pic)) { free(buf); return; }
 	if (kprender(buf,leng,*pic,*bpl,*xsiz,*ysiz,0,0) < 0) { free(buf); free((void *)*pic); (*pic) = 0; return; }
 	free(buf);
 }
