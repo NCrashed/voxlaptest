@@ -85,12 +85,36 @@ static void build_scene(void) {
 	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 189;
 	setrect(&a, &b, -1);
 
-	/* Build a one-voxel-thick sky ceiling at z=0 across the whole map.
-	 * Up-rays now terminate on this layer instead of escaping the world
-	 * boundary, so the sky reads as sky-blue rather than black. */
+	/* Wrap the playable volume in a sky-blue "skybox" so no ray escapes
+	 * through a world boundary and returns black. fogcol handles voxel
+	 * hits at the scan horizon; this covers the boundary-escape case
+	 * that produced the black horizon band and 1/sin(x)-shaped spikes
+	 * from grazing rays at the map edges. */
 	set_curcol((long)BR(0x87ceeb));
+
+	/* Ceiling at z=0, the full map */
 	a.x = 0;         a.y = 0;         a.z = 0;
 	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 0;
+	setrect(&a, &b, 0);
+
+	/* West wall (x=0) */
+	a.x = 0;         a.y = 0;         a.z = 1;
+	b.x = 0;         b.y = VSID - 1;  b.z = 189;
+	setrect(&a, &b, 0);
+
+	/* East wall (x=VSID-1) */
+	a.x = VSID - 1;  a.y = 0;         a.z = 1;
+	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 189;
+	setrect(&a, &b, 0);
+
+	/* South wall (y=0) */
+	a.x = 0;         a.y = 0;         a.z = 1;
+	b.x = VSID - 1;  b.y = 0;         b.z = 189;
+	setrect(&a, &b, 0);
+
+	/* North wall (y=VSID-1) */
+	a.x = 0;         a.y = VSID - 1;  a.z = 1;
+	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 189;
 	setrect(&a, &b, 0);
 
 	/* Reset the brush for shape insertion below. */
