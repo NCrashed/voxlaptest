@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #define VOXLAP5
 #include "voxlap5.h"
@@ -129,14 +130,14 @@ char *bacsptr[262144];
 #define LOGFLASHVANG 9
 static lpoint2d gfc[(1<<LOGFLASHVANG)*8];
 static long gfclookup[8] = {4,7,2,5,0,3,6,1}, flashcnt = 0;
-__int64 flashbrival;
+int64_t flashbrival;
 
 	//Norm flash variables
 #define GSIZ 512  //NOTE: GSIZ should be 1<<x, and must be <= 65536
 static long bbuf[GSIZ][GSIZ>>5], p2c[32], p2m[32];      //bbuf: 2.0K
 static uspoint2d ffx[((GSIZ>>1)+2)*(GSIZ>>1)], *ffxptr; // ffx:16.5K
 static long xbsox = -17, xbsoy, xbsof;
-static __int64 xbsbuf[25*5+1]; //need few bits before&after for protection
+static int64_t xbsbuf[25*5+1]; //need few bits before&after for protection
 
 	//Look tables for expandbitstack256:
 static long xbsceil[32], xbsflor[32];
@@ -186,7 +187,7 @@ extern "C" {
 	//Parallaxing sky variables (accessed by assembly code)
 long skyoff = 0, skyxsiz, *skylat = 0;
 
-__int64 gi, gcsub[9] =
+int64_t gi, gcsub[9] =
 {
 	0xff00ff00ff00ff, 0xff00ff00ff00ff,0xff00ff00ff00ff,0xff00ff00ff00ff,0xff00ff00ff00ff,
 	0xff00ff00ff00ff,0xff00ff00ff00ff,0xff00ff00ff00ff,0xff00ff00ff00ff
@@ -287,7 +288,7 @@ static _inline long mulshr16 (long a, long d)
 	}
 }
 
-static _inline __int64 mul64 (long a, long d)
+static _inline int64_t mul64 (long a, long d)
 {
 	_asm
 	{
@@ -522,7 +523,7 @@ void print4x6 (long x, long y, long fcol, long bcol, const char *fmt, ...)
 }
 
 	//NOTE: font is stored vertically first! (like .ART files)
-static const __int64 font6x8[] = //256 DOS chars, from: DOSAPP.FON (tab blank)
+static const int64_t font6x8[] = //256 DOS chars, from: DOSAPP.FON (tab blank)
 {
 	0x3E00000000000000,0x6F6B3E003E455145,0x1C3E7C3E1C003E6B,0x3000183C7E3C1800,
 	0x7E5C180030367F36,0x000018180000185C,0x0000FFFFE7E7FFFF,0xDBDBC3FF00000000,
@@ -1088,7 +1089,7 @@ xskpe:pop edi
 
 #endif
 
-void expandbitstack (long x, long y, __int64 *bind)
+void expandbitstack (long x, long y, int64_t *bind)
 {
 	if ((x|y)&(~(VSID-1))) { clearbuf((void *)bind,8,0L); return; }
 	expandbit256(sptr[y*VSID+x],(void *)bind);
@@ -1121,7 +1122,7 @@ void expandstack (long x, long y, long *uind)
 
 void gline (long leng, float x0, float y0, float x1, float y1)
 {
-	unsigned __int64 q;
+	uint64_t q;
 	float f, f1, f2, vd0, vd1, vz0, vx1, vy1, vz1;
 	long j;
 	cftype *c;
@@ -1190,8 +1191,8 @@ void gline (long leng, float x0, float y0, float x1, float y1)
 	skycast.dist = gxmax;
 #endif
 	if (gixy[0] < 0) j = glipos.x; else j = VSID-1-glipos.x;
-	q = mul64(gdz[0],j); q += (unsigned __int64)gpz[0];
-	if (q < (unsigned __int64)gxmax)
+	q = mul64(gdz[0],j); q += (uint64_t)gpz[0];
+	if (q < (uint64_t)gxmax)
 	{
 		gxmax = (long)q;
 #if ((USEZBUFFER == 1) && (USEV5ASM != 0))
@@ -1199,8 +1200,8 @@ void gline (long leng, float x0, float y0, float x1, float y1)
 #endif
 	}
 	if (gixy[1] < 0) j = glipos.y; else j = VSID-1-glipos.y;
-	q = mul64(gdz[1],j); q += (unsigned __int64)gpz[1];
-	if (q < (unsigned __int64)gxmax)
+	q = mul64(gdz[1],j); q += (uint64_t)gpz[1];
+	if (q < (uint64_t)gxmax)
 	{
 		gxmax = (long)q;
 #if ((USEZBUFFER == 1) && (USEV5ASM != 0))
@@ -1402,7 +1403,7 @@ static _inline void addusb (char *a, long b)
 	// ��������������������������������������������������������������
 void setflash (float px, float py, float pz, long flashradius, long numang, long intens)
 {
-	unsigned __int64 q;
+	uint64_t q;
 	float vx, vy;
 	long i, j, gx, ogx, ixy, col, angoff;
 	long ipx, ipy, ipz, sz0, sz1;
@@ -1467,11 +1468,11 @@ void setflash (float px, float py, float pz, long flashradius, long numang, long
 
 			//Clip borders safely (MUST use integers!) - don't wrap around
 		if (gixy[0] < 0) j = ipx; else j = VSID-1-ipx;
-		q = mul64(gdz[0],j); q += (unsigned __int64)gpz[0];
-		if (q < (unsigned __int64)gxmax) gxmax = (long)q;
+		q = mul64(gdz[0],j); q += (uint64_t)gpz[0];
+		if (q < (uint64_t)gxmax) gxmax = (long)q;
 		if (gixy[1] < 0) j = ipy; else j = VSID-1-ipy;
-		q = mul64(gdz[1],j); q += (unsigned __int64)gpz[1];
-		if (q < (unsigned __int64)gxmax) gxmax = (long)q;
+		q = mul64(gdz[1],j); q += (uint64_t)gpz[1];
+		if (q < (uint64_t)gxmax) gxmax = (long)q;
 
 	//------------------------------------------------------------------------
 		j = (((unsigned long)(gpz[1]-gpz[0]))>>31);
@@ -1614,7 +1615,7 @@ void estnorm (long x, long y, long z, point3d *fp)
 		lptr = (long *)(&xbsbuf[24*5+1]);
 		for(yy=-2;yy<=2;yy++)
 			for(xx=-2;xx<=2;xx++,lptr-=10)
-				expandbitstack(x+xx,y+yy,(__int64 *)lptr);
+				expandbitstack(x+xx,y+yy,(int64_t *)lptr);
 	}
 	else if (x != xbsox)
 	{
@@ -1625,7 +1626,7 @@ void estnorm (long x, long y, long z, point3d *fp)
 		for(yy=-2;yy<=2;yy++)
 		{
 			if (lptr < (long *)&xbsbuf[1]) lptr += 25*10;
-			expandbitstack(x+xx,y+yy,(__int64 *)lptr);
+			expandbitstack(x+xx,y+yy,(int64_t *)lptr);
 			lptr -= 5*10;
 		}
 	}
@@ -1638,7 +1639,7 @@ void estnorm (long x, long y, long z, point3d *fp)
 		for(xx=-2;xx<=2;xx++)
 		{
 			if (lptr < (long *)&xbsbuf[1]) lptr += 25*10;
-			expandbitstack(x+xx,y+yy,(__int64 *)lptr);
+			expandbitstack(x+xx,y+yy,(int64_t *)lptr);
 			lptr -= 1*10;
 		}
 	}
@@ -2029,7 +2030,7 @@ void vline (float x0, float y0, float x1, float y1, long *iy0, long *iy1)
 
 static float optistrx, optistry, optiheix, optiheiy, optiaddx, optiaddy;
 
-static __int64 foglut[2048], fogcol;
+static int64_t foglut[2048], fogcol;
 static long ofogdist = -1;
 
 #ifdef _MSC_VER
@@ -2320,7 +2321,7 @@ endh: pop edi
 
 void hrendzfogsse (long sx, long sy, long p1, long plc, long incr, long j)
 {
-	static __int64 mm7bak;
+	static int64_t mm7bak;
 	_asm
 	{
 		push esi
@@ -3863,7 +3864,7 @@ long sphtraceo (double px, double py, double pz,    //start pt
 				{
 						//   //Proposed compare optimization:
 						//f = Zb*Zb-u; g = vxyz*t; h = (Zb*2-g)*g;
-						//if ((unsigned __int64 *)&f < (unsigned __int64 *)&h)
+						//if ((uint64_t *)&f < (uint64_t *)&h)
 					u = (Zb - sqrt(u)) * rvxyz;
 					if ((u >= 0) && (u < t))
 					{
@@ -5871,7 +5872,7 @@ void setcube (long px, long py, long pz, long col)
 
 //-------------------------- SETCOLUMN CODE ENDS ----------------------------
 
-static __int64 qmulmip[8] =
+static int64_t qmulmip[8] =
 {
 	0x7fff7fff7fff7fff,0x4000400040004000,0x2aaa2aaa2aaa2aaa,0x2000200020002000,
 	0x1999199919991999,0x1555155515551555,0x1249124912491249,0x1000100010001000,
@@ -8148,9 +8149,9 @@ ray3d unproject2d(float px, float py) {
 	return ray;
 }
 
-static __int64 mskp255 = 0x00ff00ff00ff00ff;
-static __int64 mskn255 = 0xff01ff01ff01ff01;
-static __int64 rgbmask64 = 0xffffff00ffffff;
+static int64_t mskp255 = 0x00ff00ff00ff00ff;
+static int64_t mskn255 = 0xff01ff01ff01ff01;
+static int64_t rgbmask64 = 0xffffff00ffffff;
 
 	//(tf,tp,tx,ty,tcx,tcy): Tile source, (tcx&tcy) is texel (<<16) at (sx,sy)
 	//(sx,sy,xz,yz) screen coordinates and x&y zoom, all (<<16)
@@ -9452,7 +9453,7 @@ extern void *ztabasm;
 extern short qsum0[4], qsum1[4], qbplbpp[4];
 extern long kv6frameplace, kv6bytesperline;
 extern float scisdist;
-extern __int64 kv6colmul[256], kv6coladd[256];
+extern int64_t kv6colmul[256], kv6coladd[256];
 
 char ptfaces16[43][8] =
 {
@@ -9491,11 +9492,11 @@ void drawboundcubenoz3dn(kv6voxtype *, long);
 //}
 
 static __declspec(align(8)) short lightlist[MAXLIGHTS+1][4];
-static __int64 all32767 = 0x7fff7fff7fff7fff;
+static int64_t all32767 = 0x7fff7fff7fff7fff;
 
 static void updatereflects (vx5sprite *spr)
 {
-	__int64 fogmul;
+	int64_t fogmul;
 	point3d tp;
 	float f, g, h, fx, fy, fz;
 	long i, j;
@@ -12610,9 +12611,9 @@ void voxsetframebuffer (long p, long b, long x, long y)
 
 	if (vx5.fogcol >= 0)
 	{
-		fogcol = (((__int64)(vx5.fogcol&0xff0000))<<16) +
-					(((__int64)(vx5.fogcol&0x00ff00))<< 8) +
-					(((__int64)(vx5.fogcol&0x0000ff))    );
+		fogcol = (((int64_t)(vx5.fogcol&0xff0000))<<16) +
+					(((int64_t)(vx5.fogcol&0x00ff00))<< 8) +
+					(((int64_t)(vx5.fogcol&0x0000ff))    );
 
 		if (vx5.maxscandist > 4095) vx5.maxscandist = 4095;
 		if ((vx5.maxscandist != ofogdist) && (vx5.maxscandist > 0))
@@ -12627,7 +12628,7 @@ void voxsetframebuffer (long p, long b, long x, long y)
 			{
 				k = (j>>16); j += l;
 				if (k < 0) break;
-				foglut[i] = (((__int64)k)<<32)+(((__int64)k)<<16)+((__int64)k);
+				foglut[i] = (((int64_t)k)<<32)+(((int64_t)k)<<16)+((int64_t)k);
 			}
 			while (i < 2048) foglut[i++] = all32767;
 #else
@@ -12942,7 +12943,7 @@ void uninitvoxlap ()
 
 long initvoxlap ()
 {
-	__int64 q;
+	int64_t q;
 	long i, j, k, z, zz;
 	float f, ff;
 

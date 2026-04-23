@@ -31,6 +31,7 @@ credits.
 
 #include <string.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -55,7 +56,6 @@ static unsigned short SSWAPIL (unsigned short a) { return((a>>8)+(a<<8)); }
 #if !defined(_WIN32) && !defined(__DOS__)
 #include <unistd.h>
 #include <dirent.h>
-typedef long long __int64;
 static __inline long _lrotl (long i, int sh)
 	{ return((i>>(-sh))|(i<<sh)); }
 static __inline long filelength (int h)
@@ -1299,12 +1299,12 @@ static _inline long mulshr32 (long a, long d)
 
 static inline long mulshr24 (long a, long b)
 {
-	return((long)((((__int64)a)*((__int64)b))>>24));
+	return((long)((((int64_t)a)*((int64_t)b))>>24));
 }
 
 static inline long mulshr32 (long a, long b)
 {
-	return((long)((((__int64)a)*((__int64)b))>>32));
+	return((long)((((int64_t)a)*((int64_t)b))>>32));
 }
 
 #endif
