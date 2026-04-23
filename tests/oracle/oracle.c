@@ -121,13 +121,21 @@ static void build_scene(void) {
 	setsphere(&c, 8, 0);
 
 	/* -- Hidden voxel source for the meltsphere sprite --
-	 * Paint a ~12x12x15 multi-coloured block at (600, 600, 100),
-	 * deep inside the surrounding solid mass. This is well outside
-	 * the 800..1248 playable box, so the first four poses cannot
-	 * see the carve that meltsphere will leave behind — their
-	 * golden hashes stay put. Four tones (red/green/blue stripes +
-	 * a magenta asymmetry marker on one face) give the sprite
-	 * visible orientation cues in the PNGs. */
+	 * setrect with op=0 only fills *empty* voxels, so we first have
+	 * to carve a cavity in the surrounding solid mass at (600, 600,
+	 * 100). The cavity and everything inside it sit ~190 voxels
+	 * outside the 800..1248 playable box, so no camera reaches it
+	 * through the solid walls — the first four pose hashes stay put.
+	 *
+	 * Inside the cavity we paint a ~12x12x15 multi-tone block: red/
+	 * green/blue z-stripes for layered colour plus a magenta marker
+	 * on one face so the sprite has visible orientation cues in the
+	 * PNGs. */
+	set_curcol((int32_t)BR(0x87ceeb)); /* carve color — gets overwritten */
+	a.x = 590; a.y = 590; a.z = 90;
+	b.x = 610; b.y = 610; b.z = 110;
+	setrect(&a, &b, -1);
+
 	set_curcol((int32_t)BR(0xff4030)); /* red top stripe */
 	a.x = 594; a.y = 594; a.z = 93;
 	b.x = 606; b.y = 606; b.z = 98;
@@ -154,7 +162,10 @@ static void build_scene(void) {
 	 * g_sprite.voxnum points at a fresh kv6data the engine owns; we
 	 * just need to place it in world space. */
 	c.x = 600; c.y = 600; c.z = 100;
-	meltsphere(&g_sprite, &c, 8);
+	{
+		int32_t nvox = meltsphere(&g_sprite, &c, 8);
+		fprintf(stderr, "meltsphere: %d voxels extracted\n", nvox);
+	}
 
 	g_sprite.flags = 0; /* normal shading, voxnum is kv6data* */
 	g_sprite.p.x = 1050.f; g_sprite.p.y = 1050.f; g_sprite.p.z = 175.f;
