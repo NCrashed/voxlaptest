@@ -279,123 +279,57 @@ static _inline double dbound (double d, double dmin, double dmax)
 
 static _inline int32_t mulshr16 (int32_t a, int32_t d)
 {
-	_asm
-	{
-		mov eax, a
-		mov edx, d
-		imul edx
-		shrd eax, edx, 16
-	}
+	return (int32_t)(((int64_t)a * (int64_t)d) >> 16);
 }
 
 static _inline int64_t mul64 (int32_t a, int32_t d)
 {
-	_asm
-	{
-		mov eax, a
-		imul d
-	}
+	return (int64_t)a * (int64_t)d;
 }
 
 static _inline int32_t shldiv16 (int32_t a, int32_t b)
 {
-	_asm
-	{
-		mov eax, a
-		mov edx, eax
-		shl eax, 16
-		sar edx, 16
-		idiv b
-	}
+	return (int32_t)(((int64_t)a << 16) / b);
 }
 
 static _inline int32_t isshldiv16safe (int32_t a, int32_t b)
 {
-	_asm
-	{
-		mov edx, a
-		test edx, edx
-		js short skipneg0
-		neg edx
-skipneg0:
-		sar edx, 14
-
-		mov eax, b
-		test eax, eax
-		js short skipneg1
-		neg eax
-skipneg1:
-			;abs((a<<16)/b) < (1<<30) ;1 extra for good luck!
-			;-abs(a)>>14 > -abs(b)    ;use -abs because safe for 0x80000000
-			;eax-edx < 0
-		sub eax, edx
-		shr eax, 31
-	}
+	/* Mirrors the original asm branch-by-branch. The sign dance (neg
+	 * via explicit branch, not `abs`) is deliberate: it stays correct
+	 * for INT32_MIN where -INT32_MIN overflows. Arithmetic right shift
+	 * of signed negative is implementation-defined in C89; MSVC, GCC,
+	 * and Clang all implement it as sar. */
+	int32_t edx = a; if (edx >= 0) edx = -edx; edx >>= 14;
+	int32_t eax = b; if (eax >= 0) eax = -eax;
+	eax -= edx;
+	return (int32_t)((uint32_t)eax >> 31);
 }
 
 static _inline int32_t umulshr32 (int32_t a, int32_t d)
 {
-	_asm
-	{
-		mov eax, a
-		mul d
-		mov eax, edx
-	}
+	return (int32_t)(((uint64_t)(uint32_t)a * (uint32_t)d) >> 32);
 }
 
 static _inline int32_t scale (int32_t a, int32_t d, int32_t c)
 {
-	_asm
-	{
-		mov eax, a
-		imul d
-		idiv c
-	}
+	return (int32_t)(((int64_t)a * (int64_t)d) / c);
 }
 
 static _inline int32_t dmulrethigh (int32_t b, int32_t c, int32_t a, int32_t d)
 {
-	_asm
-	{
-		mov eax, a
-		imul d
-		mov ecx, eax
-		push edx
-		mov eax, b
-		imul c
-		sub eax, ecx
-		pop ecx
-		sbb edx, ecx
-		mov eax, edx
-	}
+	return (int32_t)(((int64_t)b * (int64_t)c - (int64_t)a * (int64_t)d) >> 32);
 }
 
 static _inline void copybuf (void *s, void *d, int32_t c)
 {
-	_asm
-	{
-		push esi
-		push edi
-		mov esi, s
-		mov edi, d
-		mov ecx, c
-		rep movsd
-		pop edi
-		pop esi
-	}
+	memcpy(d, s, (size_t)c * 4);
 }
 
 static _inline void clearbuf (void *d, int32_t c, int32_t a)
 {
-	_asm
-	{
-		push edi
-		mov edi, d
-		mov ecx, c
-		mov eax, a
-		rep stosd
-		pop edi
-	}
+	int32_t *p = (int32_t *)d;
+	int32_t i;
+	for (i = 0; i < c; i++) p[i] = a;
 }
 
 #else
