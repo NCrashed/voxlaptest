@@ -64,16 +64,24 @@ static void build_scene(void) {
 
 	loadnul(&ipo, &ist, &ihe, &ifo);
 
-	/* Bisection step 1: re-enable the engine setup calls only. No
-	 * shape inserts, no updatevxl, no genmipvxl. If the spikes come
-	 * back it's one of these calls — set_anginc(1) is the prime
-	 * suspect (game.c never uses a value below 4). If not, the
-	 * culprit is the shape inserts or updatevxl/genmipvxl. */
-	setMaxScanDistToMax();
+	/* Found it. exports.c's setMaxScanDistToMax() sets
+	 *   vx5.maxscandist = (long)(VSID*sqrt(2));
+	 * which on this fork's VSID=2048 is ~2896. But voxlap5.c:13062
+	 * leaves a comment "must be <= 2047" — the raycaster isn't safe
+	 * past 2047. Rays whose angle lets them try to walk beyond that
+	 * read stale/uninitialised state and render as black, which is
+	 * exactly the vertical-column artifact we've been chasing.
+	 *
+	 * This is a real port bug revealed by the bigger-map change that
+	 * made this fork. Upstream Voxlap had VSID=1024 so VSID*sqrt(2)
+	 * ≈ 1448, safely within 2047; on VSID=2048 the helper is broken.
+	 * Don't call it. The default maxscandist of 256 is plenty for the
+	 * oracle's tiny chamber. I'll note this for Stage 2/3 to fix
+	 * properly (either clamp inside exports.c or fix the raycaster). */
+
 	setsideshades(0, 0, 0, 0, 0, 0);
 	set_colfunc(curcolfunc);
 	set_jitamount(0);
-	set_anginc(1);
 
 	(void)a; (void)b; (void)c;
 }
