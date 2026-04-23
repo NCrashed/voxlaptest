@@ -23,8 +23,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <conio.h>
-#include <dos.h>
 #endif
 #include <stdlib.h>
 
@@ -40,7 +38,11 @@ extern void stopdirectdraw ();
 extern void nextpage ();
 
 void evilquit (const char *msg) {
+#ifdef _WIN32
 	MessageBoxA(NULL, msg, "ERROR", 0);
+#else
+	fprintf(stderr, "voxlap evilquit: %s\n", msg);
+#endif
 }
 
 #define VOXSIZ VSID*VSID*128
