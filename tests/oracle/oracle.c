@@ -64,79 +64,42 @@ static void build_scene(void) {
 
 	loadnul(&ipo, &ist, &ihe, &ifo);
 
-	/* See the whole map. */
+	/* Diagnostic minimal scene: stay entirely inside loadnul's built-in
+	 * chamber (x=934..1114, y=934..1114, z=83..173). No big carve, no
+	 * inserted floor, no skybox — just the shapes inside the default
+	 * chamber. If the "vertical columns in world space" artifact goes
+	 * away with this setup, the cause is in the carve/insert pipeline
+	 * (specific columns not being processed correctly at scale). If it
+	 * persists, the cause is narrower — one of the shape-insert calls
+	 * or setsphere itself. */
+
 	setMaxScanDistToMax();
-	set_fogcol((long)BR(0x87ceeb));
-
-	/* Densest angular ray sampling; avoids sub-pixel aliasing against
-	 * distant thin geometry. */
-	set_anginc(1);
-
-	/* Flatten per-face shading so every voxel face reads at full
-	 * brightness (0 = no darkening per face). */
 	setsideshades(0, 0, 0, 0, 0, 0);
-
 	set_colfunc(curcolfunc);
 	set_jitamount(0);
+	set_anginc(1);
 
-	/* Earlier attempts rebuilt the sky as one-voxel-thick inserted slabs
-	 * across the whole map, then added one-voxel-thick perimeter walls.
-	 * Both aliased badly: at 1000+ voxels distance a 1-voxel surface is
-	 * sub-pixel, so the raycaster alternately hits and misses it — that
-	 * produced the thick curved black arcs on the sides and the thin
-	 * vertical lattice in the centre of the previous north.png.
-	 *
-	 * Don't rebuild anything. Just carve a smaller playable box in the
-	 * middle of the map and let the surrounding *untouched* solid region
-	 * (hundreds of voxels thick on every side) serve as ceiling, floor,
-	 * and walls. The carve exposes the inside faces of that solid, all
-	 * painted with whatever curcol is when setrect runs. Thick solid
-	 * geometry has no sub-pixel aliasing. */
-	set_curcol((long)BR(0x87ceeb));
-	a.x = 800;   a.y = 800;   a.z = 5;
-	b.x = 1248;  b.y = 1248;  b.z = 189;
-	setrect(&a, &b, -1);
-
-	/* Insert a grey floor slab just above the natural bedrock so looking
-	 * down reads as stone rather than sky-blue. 5 voxels thick, filling
-	 * the playable footprint. Top surface at z=185 (exposed) is what the
-	 * camera sees; below that is buried. */
-	set_curcol((long)BR(0x606878));
-	a.x = 800;   a.y = 800;   a.z = 185;
-	b.x = 1248;  b.y = 1248;  b.z = 189;
-	setrect(&a, &b, 0);
-
-	/* Shapes sit on top of the grey floor (top surface z=185). */
-
-	/* Red pillar */
-	a.x = 1010; a.y = 1090; a.z = 155;
-	b.x = 1020; b.y = 1100; b.z = 184;
+	/* Red pillar sitting on chamber floor (z=172) */
+	a.x = 1010; a.y = 1080; a.z = 140;
+	b.x = 1020; b.y = 1090; b.z = 172;
 	setRectOneColor(&a, &b, (long)BR(0xff3030));
 
-	/* Green cube */
-	a.x = 1030; a.y = 1050; a.z = 175;
-	b.x = 1040; b.y = 1060; b.z = 184;
+	/* Green cube on the floor */
+	a.x = 1030; a.y = 1050; a.z = 162;
+	b.x = 1040; b.y = 1060; b.z = 172;
 	setRectOneColor(&a, &b, (long)BR(0x30c030));
 
-	/* Blue flat tile */
-	a.x = 1000; a.y = 1030; a.z = 183;
-	b.x = 1050; b.y = 1070; b.z = 184;
+	/* Blue flat tile laid on the floor */
+	a.x = 1000; a.y = 1030; a.z = 171;
+	b.x = 1050; b.y = 1070; b.z = 172;
 	setRectOneColor(&a, &b, (long)BR(0x3060ff));
 
-	/* Yellow sphere. setsphere reads its colour from vx5.curcol. */
+	/* Yellow sphere sitting just above the floor */
 	set_curcol((long)BR(0xffd050));
-	c.x = 1060; c.y = 1040; c.z = 178;
+	c.x = 1060; c.y = 1040; c.z = 164;
 	setsphere(&c, 8, 0);
 
 	updatevxl();
-
-	/* Build the mip pyramid over the whole map. Voxlap defaults have
-	 * vxlmipuse > 0 and mipscandist fairly small (game.c sets 192), so
-	 * voxel samples beyond that distance are read from mip levels. With
-	 * no genmipvxl call the mip buffers are uninitialised, producing
-	 * stray "no voxel" reads that render as perfectly vertical black
-	 * lines at fixed screen-column positions. Generating the pyramid
-	 * after the scene is finalised gives the raycaster real data. */
 	genmipvxl(0, 0, VSID, VSID);
 }
 
