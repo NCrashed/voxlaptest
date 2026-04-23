@@ -63,29 +63,38 @@ static void build_scene(void) {
 
 	loadnul(&ipo, &ist, &ihe, &ifo);
 
-	/* See the whole map: max out ray distance and paint the horizon with
-	 * sky-blue so rays that escape don't fall back to black. */
+	/* See the whole map. fogcol paints the distance-fog horizon on voxel
+	 * hits (not on rays that escape the world — those need a real sky
+	 * ceiling, built below). */
 	setMaxScanDistToMax();
 	set_fogcol((long)BR(0x87ceeb));
 
-	/* Disable colour jitter so inserted shapes carry the exact ARGB
-	 * values we specify. */
 	set_colfunc(curcolfunc);
 	set_jitamount(0);
 
 	/* Voxlap paints newly-exposed bedrock surfaces with the current
-	 * curcol. Set it to a cool grey *before* the big carve so the
-	 * ground plane reads as stone rather than loadnul's default brown. */
+	 * curcol. Set it to a cool grey *before* the carve so the ground
+	 * plane reads as stone rather than loadnul's default brown. */
 	set_curcol((long)BR(0x606878));
 
-	/* Voxlap's +Z is down (z=0 is sky, z=MAXZDIM-1 is deep underground).
-	 * loadnul leaves the map solid except for a 180-cube chamber at the
-	 * centre — hence the "interior room" artifact. Carve the whole volume
-	 * from the sky down to a floor plane at z=189 so the camera stands
-	 * in open space. */
-	a.x = 4;         a.y = 4;         a.z = 0;
-	b.x = VSID - 4;  b.y = VSID - 4;  b.z = 189;
+	/* Voxlap's +Z is down (z=0 is the top boundary, MAXZDIM-1 is deepest).
+	 * Carve the whole map — edge-to-edge so we don't leave a solid border
+	 * of map-boundary columns as needle-like silhouettes in the distance,
+	 * and all the way up to z=0 so we can rebuild a clean sky layer. */
+	a.x = 0;         a.y = 0;         a.z = 0;
+	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 189;
 	setrect(&a, &b, -1);
+
+	/* Build a one-voxel-thick sky ceiling at z=0 across the whole map.
+	 * Up-rays now terminate on this layer instead of escaping the world
+	 * boundary, so the sky reads as sky-blue rather than black. */
+	set_curcol((long)BR(0x87ceeb));
+	a.x = 0;         a.y = 0;         a.z = 0;
+	b.x = VSID - 1;  b.y = VSID - 1;  b.z = 0;
+	setrect(&a, &b, 0);
+
+	/* Reset the brush for shape insertion below. */
+	set_curcol((long)BR(0x606878));
 
 	/* Red pillar */
 	a.x = 1010; a.y = 1090; a.z = 160;
