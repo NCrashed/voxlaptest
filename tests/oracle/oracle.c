@@ -64,15 +64,17 @@ static void build_scene(void) {
 
 	loadnul(&ipo, &ist, &ihe, &ifo);
 
-	/* Ultra-minimal ablation: loadnul only. No shape inserts, no
-	 * setMaxScanDistToMax, no setsideshades, no set_anginc, no
-	 * genmipvxl, no updatevxl. If the black-column artifact is gone
-	 * here, one of the things I've been adding is the cause, and I
-	 * can re-enable them one at a time. If the artifact persists,
-	 * it's in loadnul itself or in the default camera parameters
-	 * (setcamera or opticast). */
+	/* Bisection step 1: re-enable the engine setup calls only. No
+	 * shape inserts, no updatevxl, no genmipvxl. If the spikes come
+	 * back it's one of these calls — set_anginc(1) is the prime
+	 * suspect (game.c never uses a value below 4). If not, the
+	 * culprit is the shape inserts or updatevxl/genmipvxl. */
+	setMaxScanDistToMax();
+	setsideshades(0, 0, 0, 0, 0, 0);
+	set_colfunc(curcolfunc);
+	set_jitamount(0);
+	set_anginc(1);
 
-	/* Reference to silence unused-variable warnings. */
 	(void)a; (void)b; (void)c;
 }
 
