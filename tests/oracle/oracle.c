@@ -129,6 +129,15 @@ static void build_scene(void) {
 	setsphere(&c, 8, 0);
 
 	updatevxl();
+
+	/* Build the mip pyramid over the whole map. Voxlap defaults have
+	 * vxlmipuse > 0 and mipscandist fairly small (game.c sets 192), so
+	 * voxel samples beyond that distance are read from mip levels. With
+	 * no genmipvxl call the mip buffers are uninitialised, producing
+	 * stray "no voxel" reads that render as perfectly vertical black
+	 * lines at fixed screen-column positions. Generating the pyramid
+	 * after the scene is finalised gives the raycaster real data. */
+	genmipvxl(0, 0, VSID, VSID);
 }
 
 static void set_camera_yaw_pitch(double px, double py, double pz,
