@@ -64,43 +64,16 @@ static void build_scene(void) {
 
 	loadnul(&ipo, &ist, &ihe, &ifo);
 
-	/* Diagnostic minimal scene: stay entirely inside loadnul's built-in
-	 * chamber (x=934..1114, y=934..1114, z=83..173). No big carve, no
-	 * inserted floor, no skybox — just the shapes inside the default
-	 * chamber. If the "vertical columns in world space" artifact goes
-	 * away with this setup, the cause is in the carve/insert pipeline
-	 * (specific columns not being processed correctly at scale). If it
-	 * persists, the cause is narrower — one of the shape-insert calls
-	 * or setsphere itself. */
+	/* Ultra-minimal ablation: loadnul only. No shape inserts, no
+	 * setMaxScanDistToMax, no setsideshades, no set_anginc, no
+	 * genmipvxl, no updatevxl. If the black-column artifact is gone
+	 * here, one of the things I've been adding is the cause, and I
+	 * can re-enable them one at a time. If the artifact persists,
+	 * it's in loadnul itself or in the default camera parameters
+	 * (setcamera or opticast). */
 
-	setMaxScanDistToMax();
-	setsideshades(0, 0, 0, 0, 0, 0);
-	set_colfunc(curcolfunc);
-	set_jitamount(0);
-	set_anginc(1);
-
-	/* Red pillar sitting on chamber floor (z=172) */
-	a.x = 1010; a.y = 1080; a.z = 140;
-	b.x = 1020; b.y = 1090; b.z = 172;
-	setRectOneColor(&a, &b, (long)BR(0xff3030));
-
-	/* Green cube on the floor */
-	a.x = 1030; a.y = 1050; a.z = 162;
-	b.x = 1040; b.y = 1060; b.z = 172;
-	setRectOneColor(&a, &b, (long)BR(0x30c030));
-
-	/* Blue flat tile laid on the floor */
-	a.x = 1000; a.y = 1030; a.z = 171;
-	b.x = 1050; b.y = 1070; b.z = 172;
-	setRectOneColor(&a, &b, (long)BR(0x3060ff));
-
-	/* Yellow sphere sitting just above the floor */
-	set_curcol((long)BR(0xffd050));
-	c.x = 1060; c.y = 1040; c.z = 164;
-	setsphere(&c, 8, 0);
-
-	updatevxl();
-	genmipvxl(0, 0, VSID, VSID);
+	/* Reference to silence unused-variable warnings. */
+	(void)a; (void)b; (void)c;
 }
 
 static void set_camera_yaw_pitch(double px, double py, double pz,
