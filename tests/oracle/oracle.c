@@ -38,7 +38,7 @@ extern void set_jitamount(long v);
 extern void set_colfunc(long (*v)(lpoint3d *));
 extern void set_fogcol(long v);
 extern void set_anginc(long v);
-extern void setMaxScanDistToMax(void);
+extern void setMaxScanDist(long v);
 
 /* Voxlap's 32-bit colour is packed as (brightness<<24) | (R<<16) | (G<<8) | B.
  * The alpha byte is *brightness*, not opacity: setting it to 0x00 renders
@@ -64,26 +64,57 @@ static void build_scene(void) {
 
 	loadnul(&ipo, &ist, &ihe, &ifo);
 
-	/* Found it. exports.c's setMaxScanDistToMax() sets
-	 *   vx5.maxscandist = (long)(VSID*sqrt(2));
-	 * which on this fork's VSID=2048 is ~2896. But voxlap5.c:13062
-	 * leaves a comment "must be <= 2047" — the raycaster isn't safe
-	 * past 2047. Rays whose angle lets them try to walk beyond that
-	 * read stale/uninitialised state and render as black, which is
-	 * exactly the vertical-column artifact we've been chasing.
-	 *
-	 * This is a real port bug revealed by the bigger-map change that
-	 * made this fork. Upstream Voxlap had VSID=1024 so VSID*sqrt(2)
-	 * ≈ 1448, safely within 2047; on VSID=2048 the helper is broken.
-	 * Don't call it. The default maxscandist of 256 is plenty for the
-	 * oracle's tiny chamber. I'll note this for Stage 2/3 to fix
-	 * properly (either clamp inside exports.c or fix the raycaster). */
+	/* maxscandist must be <= 2047 (voxlap5.c:13062). The exported
+	 * setMaxScanDistToMax() helper is broken on this fork — it
+	 * computes VSID*sqrt(2) ≈ 2896 for VSID=2048 and overflows that
+	 * ceiling, rendering specific ray columns as black. See
+	 * memory/project_setmaxscandist_bug.md. Use a safe manual value
+	 * large enough to cover the diagonal of our 448-voxel playable
+	 * box (~633) with headroom. */
+	setMaxScanDist(1024);
+	set_fogcol((long)BR(0x87ceeb));
 
 	setsideshades(0, 0, 0, 0, 0, 0);
 	set_colfunc(curcolfunc);
 	set_jitamount(0);
+	set_anginc(1);
 
-	(void)a; (void)b; (void)c;
+	/* Carve a 448x448x185 playable box at map centre; the carve paints
+	 * exposed inside faces of the surrounding solid with curcol. */
+	set_curcol((long)BR(0x87ceeb));
+	a.x = 800;   a.y = 800;   a.z = 5;
+	b.x = 1248;  b.y = 1248;  b.z = 189;
+	setrect(&a, &b, -1);
+
+	/* Grey floor slab inside the playable box so looking down reads
+	 * as stone. Top surface at z=185 is what the camera sees. */
+	set_curcol((long)BR(0x606878));
+	a.x = 800;   a.y = 800;   a.z = 185;
+	b.x = 1248;  b.y = 1248;  b.z = 189;
+	setrect(&a, &b, 0);
+
+	/* Red pillar */
+	a.x = 1010; a.y = 1090; a.z = 155;
+	b.x = 1020; b.y = 1100; b.z = 184;
+	setRectOneColor(&a, &b, (long)BR(0xff3030));
+
+	/* Green cube */
+	a.x = 1030; a.y = 1050; a.z = 175;
+	b.x = 1040; b.y = 1060; b.z = 184;
+	setRectOneColor(&a, &b, (long)BR(0x30c030));
+
+	/* Blue flat tile */
+	a.x = 1000; a.y = 1030; a.z = 183;
+	b.x = 1050; b.y = 1070; b.z = 184;
+	setRectOneColor(&a, &b, (long)BR(0x3060ff));
+
+	/* Yellow sphere */
+	set_curcol((long)BR(0xffd050));
+	c.x = 1060; c.y = 1040; c.z = 178;
+	setsphere(&c, 8, 0);
+
+	updatevxl();
+	genmipvxl(0, 0, VSID, VSID);
 }
 
 static void set_camera_yaw_pitch(double px, double py, double pz,
@@ -109,19 +140,11 @@ struct pose {
 };
 
 int main(void) {
-	/* Camera positions use small irrational-ish offsets on each axis so
-	 * no ray from the camera to an integer voxel corner lands at a
-	 * simple rational slope p/q. Voxlap's DDA raycaster has tie-breaking
-	 * issues at rational slopes (dx/dy = 1/4, 1/5, 1/6, ...) where a
-	 * ray exactly hits a voxel corner — those rays "slip through" the
-	 * grid and render as vertical black columns at fixed ray angles.
-	 * Offsetting the camera by e.g. 0.37 on each axis breaks the
-	 * rational alignment for every ray cast from this pose. */
 	static const struct pose poses[] = {
-		{"north",     1024.37, 1024.37, 128.37, 1.5707963267948966, 0.0},
-		{"east",      1024.37, 1024.37, 128.37, 0.0,                0.0},
-		{"diag_down", 1000.37, 1000.37, 110.37, 0.7853981633974483, 0.4},
-		{"high_down", 1024.37, 1024.37,  90.37, 1.5707963267948966, 0.7},
+		{"north",     1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0},
+		{"east",      1024.0, 1024.0, 128.0, 0.0,                0.0},
+		{"diag_down", 1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4},
+		{"high_down", 1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7},
 	};
 	const size_t N = sizeof(poses) / sizeof(poses[0]);
 	size_t i;

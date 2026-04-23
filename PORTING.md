@@ -59,6 +59,7 @@ Refactor-only stage. 32-bit MSVC still builds. Screenshots must match the oracle
 - `__int64` → `int64_t`.
 - Audit `#pragma pack(push,1)` structs (`vx5sprite`, `kv6data`, `kv6voxtype`) for pointer-sized fields.
 - Replace the local `MAX_PATH` fallback with an engine-internal define that doesn't pull in `windows.h`.
+- **Fix the `setMaxScanDistToMax()` VSID=2048 bug.** The helper in `voxlap/exports.c` computes `vx5.maxscandist = VSID*sqrt(2)`, which on this fork's 2048-wide map is ~2896 and overflows the raycaster's documented 2047 ceiling (`voxlap5.c:13062`). Upstream was safe with VSID=1024 (~1448). Symptom is specific ray columns rendering as black at fixed angles. Minimal fix: clamp to `min(VSID*sqrt(2), 2047)` inside the helper. Proper fix belongs in Stage 4 — investigate whether the 2047 cap is algorithmic or just a stale assumption, and lift it when rewriting `grouscanasm` if the former.
 
 ### Stage 3 — Replace MSVC inline asm with portable C/intrinsics (2 weeks)
 
