@@ -183,7 +183,7 @@ VOXLAP_API extern int32_t savevxl (const char *, dpoint3d *, dpoint3d *, dpoint3
 VOXLAP_API extern int32_t loadsky (const char *);
 
 	//Screen related functions:
-VOXLAP_API extern void voxsetframebuffer (int32_t, int32_t, int32_t, int32_t);
+VOXLAP_API extern void voxsetframebuffer (intptr_t, int32_t, int32_t, int32_t);
 VOXLAP_API extern void setsideshades (char, char, char, char, char, char);
 VOXLAP_API extern void setcamera (dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *, float, float, float);
 VOXLAP_API extern void opticast ();

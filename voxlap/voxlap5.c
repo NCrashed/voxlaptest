@@ -821,13 +821,13 @@ static int32_t slng (const char *s)
 	const char *v;
 
 	for(v=s;v[0];v+=v[0]*4);
-	return((int32_t)v-(int32_t)s+(v[2]-v[1]+1)*4+4);
+	return((intptr_t)v-(int32_t)s+(v[2]-v[1]+1)*4+4);
 }
 
 void voxdealloc (const char *v)
 {
 	int32_t i, j;
-	i = (((int32_t)v-(int32_t)vbuf)>>2); j = (slng(v)>>2)+i;
+	i = (((intptr_t)v-(intptr_t)vbuf)>>2); j = (slng(v)>>2)+i;
 #if 0
 	while (i < j) { vbit[i>>5] &= ~(1<<i); i++; }
 #else
@@ -951,7 +951,7 @@ int32_t getcube (int32_t x, int32_t y, int32_t z)
 		if (z <= v[2])
 		{
 			if (z < v[1]) return(0);
-			return((int32_t)&v[(z-v[1])*4+4]);
+			return((intptr_t)&v[(z-v[1])*4+4]);
 		}
 		ceilnum = v[2]-v[1]-v[0]+2;
 
@@ -961,7 +961,7 @@ int32_t getcube (int32_t x, int32_t y, int32_t z)
 		if (z < v[3])
 		{
 			if (z-v[3] < ceilnum) return(1);
-			return((int32_t)&v[(z-v[3])*4]);
+			return((intptr_t)&v[(z-v[3])*4]);
 		}
 	}
 }
@@ -1113,7 +1113,7 @@ void expandstack (int32_t x, int32_t y, int32_t *uind)
 		if (!v[0]) break;
 		v += v[0]*4;
 
-		topz = v[3]+(((int32_t)v2-(int32_t)v)>>2);
+		topz = v[3]+(((intptr_t)v2-(intptr_t)v)>>2);
 		while (z < topz) { uind[z] = -2; z++; }
 		while (z < v[3]) { uind[z] = *(int32_t *)v2; z++; v2 += 4; }
 	}
@@ -1423,7 +1423,7 @@ void setflash (float px, float py, float pz, int32_t flashradius, int32_t numang
 
 	gposxfrac[1] = px - (float)(ipx); gposxfrac[0] = 1 - gposxfrac[1];
 	gposyfrac[1] = py - (float)(ipy); gposyfrac[0] = 1 - gposyfrac[1];
-	gpixy = (int32_t)&sptr[ipy*VSID + ipx];
+	gpixy = (intptr_t)&sptr[ipy*VSID + ipx];
 	ftol(pz*FPREC-.5f,&gposz);
 	for(gylookup[0]=-gposz,i=1;i<516;i++) gylookup[i] = gylookup[i-1]+FPREC;
 
@@ -1489,7 +1489,7 @@ fdrawfwall:;
 				if (v[1] > c->z1) c->z1 = v[1];
 				else { do
 				{
-					c->z1--; col = (int32_t)&v[(c->z1-v[1])*4+4];
+					c->z1--; col = (intptr_t)&v[(c->z1-v[1])*4+4];
 					while (dmulrethigh(gylookup[c->z1],gfc[c->cx1].x,gfc[c->cx1].y,ogx) < 0)
 					{
 						mmxcoloradd((int32_t *)col); c->cx1--;
@@ -1506,7 +1506,7 @@ fdrawfwall:;
 				if (v[3] < c->z0) c->z0 = v[3];
 				else { do
 				{
-					c->z0++; col = (int32_t)&v[(c->z0-v[3])*4-4];
+					c->z0++; col = (intptr_t)&v[(c->z0-v[3])*4-4];
 					while (dmulrethigh(gylookup[c->z0],gfc[c->cx0].x,gfc[c->cx0].y,ogx) >= 0)
 					{
 						mmxcoloradd((int32_t *)col); c->cx0++;
@@ -1646,9 +1646,9 @@ void estnorm (int32_t x, int32_t y, int32_t z, point3d *fp)
 
 	z -= 2;
 	if ((z&31) <= 27) //2 <= (z&31) <= 29
-		{ lptr = (int32_t *)((int32_t)(&xbsbuf[xbsof+1]) + ((z&~31)>>3)); z &= 31; }
+		{ lptr = (int32_t *)((intptr_t)(&xbsbuf[xbsof+1]) + ((z&~31)>>3)); z &= 31; }
 	else
-		{ lptr = (int32_t *)((int32_t)(&xbsbuf[xbsof+1]) + (z>>3)); z &= 7; }
+		{ lptr = (int32_t *)((intptr_t)(&xbsbuf[xbsof+1]) + (z>>3)); z &= 7; }
 
 	for(yy=-2;yy<=2;yy++)
 	{
@@ -1814,7 +1814,7 @@ void setnormflash (float px, float py, float pz, int32_t flashradius, int32_t in
 					{
 						for(z=v[1];z<=v[2];z++)
 						{
-							if (z-ipz < 0) { tbuf2[i] = z-ipz; tbuf2[i+1] = (int32_t)&v[(z-v[1])*4+4]; i += 2; }
+							if (z-ipz < 0) { tbuf2[i] = z-ipz; tbuf2[i+1] = (intptr_t)&v[(z-v[1])*4+4]; i += 2; }
 							else
 							{
 								//if (z-ipz < -y) continue; //TEMP HACK!!!
@@ -1829,7 +1829,7 @@ void setnormflash (float px, float py, float pz, int32_t flashradius, int32_t in
 						ceilnum = v[2]-v[1]-v[0]+2; v += v[0]*4;
 						for(z=v[3]+ceilnum;z<v[3];z++)
 						{
-							if (z < ipz) { tbuf2[i] = z-ipz; tbuf2[i+1] = (int32_t)&v[(z-v[3])*4]; i += 2; }
+							if (z < ipz) { tbuf2[i] = z-ipz; tbuf2[i+1] = (intptr_t)&v[(z-v[3])*4]; i += 2; }
 							else
 							{
 								//if (z-ipz < -y) continue; //TEMP HACK!!!
@@ -1871,7 +1871,7 @@ normflash_exwhile1:;
 					{
 						for(z=v[1];z<=v[2];z++)
 						{
-							if (z-ipz < 0) { tbuf2[i] = z-ipz; tbuf2[i+1] = (int32_t)&v[(z-v[1])*4+4]; i += 2; }
+							if (z-ipz < 0) { tbuf2[i] = z-ipz; tbuf2[i+1] = (intptr_t)&v[(z-v[1])*4+4]; i += 2; }
 							else
 							{
 								//if (z-ipz < -y) continue; //TEMP HACK!!!
@@ -1886,7 +1886,7 @@ normflash_exwhile1:;
 						ceilnum = v[2]-v[1]-v[0]+2; v += v[0]*4;
 						for(z=v[3]+ceilnum;z<v[3];z++)
 						{
-							if (z < ipz) { tbuf2[i] = z-ipz; tbuf2[i+1] = (int32_t)&v[(z-v[3])*4]; i += 2; }
+							if (z < ipz) { tbuf2[i] = z-ipz; tbuf2[i+1] = (intptr_t)&v[(z-v[3])*4]; i += 2; }
 							else
 							{
 								//if (z-ipz < -y) continue; //TEMP HACK!!!
@@ -1968,7 +1968,7 @@ normflash_exwhile3:;
 						{
 							if (ipz-z >= flashradius) continue;
 							if (ipz-z < k) goto normflash_exwhile4;
-							tbuf2[i] = ipz-z; tbuf2[i+1] = (int32_t)&v[(z-v[1])*4+4]; i += 2;
+							tbuf2[i] = ipz-z; tbuf2[i+1] = (intptr_t)&v[(z-v[1])*4+4]; i += 2;
 						}
 						if (!v[0]) break;
 						ceilnum = v[2]-v[1]-v[0]+2; v += v[0]*4;
@@ -1976,7 +1976,7 @@ normflash_exwhile3:;
 						{
 							if (ipz-z >= flashradius) continue;
 							if (ipz-z < k) goto normflash_exwhile4;
-							tbuf2[i] = ipz-z; tbuf2[i+1] = (int32_t)&v[(z-v[3])*4]; i += 2;
+							tbuf2[i] = ipz-z; tbuf2[i+1] = (intptr_t)&v[(z-v[3])*4]; i += 2;
 						}
 					}
 normflash_exwhile4:;
@@ -3453,7 +3453,7 @@ void opticast ()
 	glipos.x = ((int32_t)gipos.x);
 	glipos.y = ((int32_t)gipos.y);
 	glipos.z = ((int32_t)gipos.z);
-	gpixy = (int32_t)&sptr[glipos.y*VSID + glipos.x];
+	gpixy = (intptr_t)&sptr[glipos.y*VSID + glipos.x];
 	ftol(gipos.z*PREC-.5f,&gposz);
 	gposxfrac[1] = gipos.x - (float)glipos.x; gposxfrac[0] = 1-gposxfrac[1];
 	gposyfrac[1] = gipos.y - (float)glipos.y; gposyfrac[0] = 1-gposyfrac[1];
@@ -4636,7 +4636,7 @@ void loadnul (dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe, dpoint3d *ifo)
 		}
 
 	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
-	vbiti = (((int32_t)v-(int32_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
+	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
 	vbit[vbiti>>5] = (1<<vbiti)-1;
@@ -4740,7 +4740,7 @@ int32_t loaddta (const char *filename, dpoint3d *ipo, dpoint3d *ist, dpoint3d *i
 	}
 
 	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
-	vbiti = (((int32_t)v-(int32_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
+	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
 	vbit[vbiti>>5] = (1<<vbiti)-1;
@@ -4828,7 +4828,7 @@ int32_t loadpng (const char *filename, dpoint3d *ipo, dpoint3d *ist, dpoint3d *i
 	}
 
 	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
-	vbiti = (((int32_t)v-(int32_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
+	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
 	vbit[vbiti>>5] = (1<<vbiti)-1;
@@ -4917,7 +4917,7 @@ void loadbsp (const char *filnam, dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe, d
 		}
 
 	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
-	vbiti = (((int32_t)v-(int32_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
+	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
 	vbit[vbiti>>5] = (1<<vbiti)-1;
@@ -5037,13 +5037,13 @@ int32_t loadvxl (const char *lodfilnam, dpoint3d *ipo, dpoint3d *ist, dpoint3d *
 	for(i=0;i<VSID*VSID;i++)
 	{
 		sptr[i] = v;
-		while (v[0] && (int32_t)v < ((int32_t)&vbuf[1]+leng)) v += (((int32_t)v[0])<<2);
+		while (v[0] && (intptr_t)v < ((intptr_t)&vbuf[1]+leng)) v += (((int32_t)v[0])<<2);
 		v += ((((int32_t)v[2])-((int32_t)v[1])+2)<<2);
 	}
 	kzclose();
 
 	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
-	vbiti = (((int32_t)v-(int32_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
+	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
 	vbit[vbiti>>5] = (1<<vbiti)-1;
@@ -5339,10 +5339,10 @@ int32_t compilerle (int32_t *n0, int32_t *n1, int32_t *n2, int32_t *n3, int32_t 
 	while (1)
 	{
 		ia = v[1]; p.z = v[2];
-		ic[0] = ia; ic[1] = p.z+1; ic[2] = ((int32_t)v)-(ia<<2)+4; ic += 3;
+		ic[0] = ia; ic[1] = p.z+1; ic[2] = ((intptr_t)v)-(ia<<2)+4; ic += 3;
 		i = v[0]; if (!i) break;
 		v += i*4; ze = v[3];
-		ic[0] = ze+p.z-ia-i+2; ic[1] = ze; ic[2] = ((int32_t)v)-(ze<<2); ic += 3;
+		ic[0] = ze+p.z-ia-i+2; ic[1] = ze; ic[2] = ((intptr_t)v)-(ze<<2); ic += 3;
 	}
 	ic[0] = MAXZDIM; ic[1] = MAXZDIM;
 
@@ -7654,7 +7654,7 @@ void hollowfillstart (int32_t x, int32_t y, int32_t z)
 
 	a.x = x; a.y = y;
 
-	v = sptr[y*VSID+x]; j = ((((int32_t)v)-(int32_t)vbuf)>>2); a.z0 = 0;
+	v = sptr[y*VSID+x]; j = ((((intptr_t)v)-(intptr_t)vbuf)>>2); a.z0 = 0;
 	while (1)
 	{
 		a.z1 = (int32_t)(v[1]);
@@ -7675,7 +7675,7 @@ floodfill3dskip2:;
 			if (i&1) { x = a.x+(i&2)-1; if ((uint32_t)x >= VSID) continue; y = a.y; }
 				 else { y = a.y+(i&2)-1; if ((uint32_t)y >= VSID) continue; x = a.x; }
 
-			v = sptr[y*VSID+x]; j = ((((int32_t)v)-(int32_t)vbuf)>>2); z0 = 0;
+			v = sptr[y*VSID+x]; j = ((((intptr_t)v)-(intptr_t)vbuf)>>2); z0 = 0;
 			while (1)
 			{
 				z1 = (int32_t)(v[1]);
@@ -7707,7 +7707,7 @@ void sethollowfill ()
 
 	for(i=0;i<VSID*VSID;i++)
 	{
-		j = ((((int32_t)sptr[i])-(int32_t)vbuf)>>2);
+		j = ((((intptr_t)sptr[i])-(intptr_t)vbuf)>>2);
 		for(v=sptr[i];v[0];v+=v[0]*4) { vbit[j>>5] &= ~(1<<j); j += 2; }
 		vbit[j>>5] &= ~(1<<j);
 	}
@@ -7721,7 +7721,7 @@ void sethollowfill ()
 	for(y=0;y<VSID;y++)
 		for(x=0;x<VSID;x++,i++)
 		{
-			j = ((((int32_t)sptr[i])-(int32_t)vbuf)>>2);
+			j = ((((intptr_t)sptr[i])-(intptr_t)vbuf)>>2);
 			v = sptr[i]; z0 = MAXZDIM;
 			while (1)
 			{
@@ -7752,7 +7752,7 @@ static int32_t *pathashead, pathashcnt, pathashmax;
 static void initpathash ()
 {
 	patbuf = (lpoint2d *)radar;
-	pathashead = (int32_t *)(((int32_t)patbuf)+(1<<LPATBUFSIZ)*sizeof(lpoint2d));
+	pathashead = (int32_t *)(((intptr_t)patbuf)+(1<<LPATBUFSIZ)*sizeof(lpoint2d));
 	pathashdat = (lpoint3d *)(((int32_t)pathashead)+((1<<LPATHASHSIZ)*4));
 	pathashmax = ((max((MAXXDIM*MAXYDIM*27)>>1,(VSID+4)*3*256*4)-((1<<LPATBUFSIZ)*sizeof(lpoint2d))-(1<<LPATHASHSIZ)*4)/12);
 	memset(pathashead,-1,(1<<LPATHASHSIZ)*4);
@@ -9279,8 +9279,8 @@ kv6data *genmipkv6 (kv6data *kv6)
 	nkv6->lowermip = 0;
 
 	xptr = (int32_t *)(((int32_t)nkv6) + sizeof(kv6data));
-	xyptr = (unsigned short *)(((int32_t)xptr) + (xs<<2));
-	voxptr = (kv6voxtype *)(((int32_t)xyptr) + xysiz);
+	xyptr = (unsigned short *)(((intptr_t)xptr) + (xs<<2));
+	voxptr = (kv6voxtype *)(((intptr_t)xyptr) + xysiz);
 	n = 0;
 
 	v0[0] = kv6->vox; sxyi2 = kv6->ylen; sxyi2i = (kv6->ysiz<<1);
@@ -10702,7 +10702,7 @@ static void floodsucksprite (vx5sprite *spr, kv6data *kv, int32_t ox, int32_t oy
 					}
 					vfifo[i] = x; vfifo[i+1] = y;
 					vfifo[i+2] = (int32_t)ov; vfifo[i+3] = (int32_t)v;
-					n += (((int32_t)v)-((int32_t)ov))/sizeof(kv6voxtype)+1;
+					n += (((intptr_t)v)-((int32_t)ov))/sizeof(kv6voxtype)+1;
 					v->vis &= ~64;
 				}
 			}
@@ -12343,7 +12343,7 @@ void dofall (int32_t i)
 		v[3]++;
 		if ((v[3] == v[1]) && (vx5.flstcnt[i].i1 >= 0))
 		{
-			j = isnewfloatingot((int32_t)v);
+			j = isnewfloatingot((intptr_t)v);
 				//Make sure it's not part of the same floating object
 			if ((j < vx5.flstcnt[i].i0) || (j >= vx5.flstcnt[i].i1))
 				vx5.flstcnt[i].i1 = -1; //Mark flstcnt[i] for scum2 fixup
@@ -12421,7 +12421,7 @@ int32_t meltfall (vx5sprite *spr, int32_t fi, int32_t delvxl)
 			{
 				nv = v+v[0]*4;
 
-				i = isnewfloatingot((int32_t)v);
+				i = isnewfloatingot((intptr_t)v);
 				if (((uint32_t)i >= vx5.flstcnt[fi].i1) || (i < vx5.flstcnt[fi].i0))
 					continue;
 
@@ -12479,7 +12479,7 @@ int32_t meltfall (vx5sprite *spr, int32_t fi, int32_t delvxl)
 					for(i=4;i<j;i+=4) *(int32_t *)&v[i] = *(int32_t *)&nv[i];
 
 						//remove end of RLE column from vbit
-					i = ((((int32_t)(&v[i]))-(int32_t)vbuf)>>2); j = (k>>2)+i;
+					i = ((((intptr_t)(&v[i]))-(intptr_t)vbuf)>>2); j = (k>>2)+i;
 #if 0
 					while (i < j) { vbit[i>>5] &= ~(1<<i); i++; }
 #else
@@ -12508,7 +12508,7 @@ int32_t meltfall (vx5sprite *spr, int32_t fi, int32_t delvxl)
 				{
 					nv = v+v[0]*4;
 
-					i = isnewfloatingot((int32_t)v);
+					i = isnewfloatingot((intptr_t)v);
 					if (((uint32_t)i >= vx5.flstcnt[fi].i1) || (i < vx5.flstcnt[fi].i0))
 						continue;
 
@@ -12528,7 +12528,7 @@ int32_t meltfall (vx5sprite *spr, int32_t fi, int32_t delvxl)
 					for(i=4;i<j;i+=4) *(int32_t *)&v[i] = *(int32_t *)&nv[i];
 
 						//remove end of RLE column from vbit
-					i = ((((int32_t)(&v[i]))-(int32_t)vbuf)>>2); j = (k>>2)+i;
+					i = ((((intptr_t)(&v[i]))-(intptr_t)vbuf)>>2); j = (k>>2)+i;
 #if 0
 					while (i < j) { vbit[i>>5] &= ~(1<<i); i++; }
 #else
@@ -12575,7 +12575,7 @@ void finishfalls ()
 
 //----------------------------------------------------------------------------
 
-void voxsetframebuffer (int32_t p, int32_t b, int32_t x, int32_t y)
+void voxsetframebuffer (intptr_t p, int32_t b, int32_t x, int32_t y)
 {
 	int32_t i;
 
@@ -12605,7 +12605,7 @@ void voxsetframebuffer (int32_t p, int32_t b, int32_t x, int32_t y)
 #if (USEZBUFFER == 1)
 		//zbuffer aligns its memory to the same pixel boundaries as the screen!
 		//WARNING: Pentium 4's L2 cache has severe slowdowns when 65536-64 <= (zbufoff&65535) < 64
-	zbufoff = (((((int32_t)zbuffermem)-frameplace-128)+255)&~255)+128;
+	zbufoff = (((((intptr_t)zbuffermem)-frameplace-128)+255)&~255)+128;
 #endif
 	uurend = &uurendmem[((frameplace&4)^(((int32_t)uurendmem)&4))>>2];
 

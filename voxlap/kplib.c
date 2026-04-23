@@ -1546,7 +1546,7 @@ static int32_t kpegrend (const char *kfilebuf, int32_t kfilength,
 			leng = ((int32_t)kfileptr[0]<<8)+(int32_t)kfileptr[1]-2;
 			kfileptr += 2;
 		}
-		//printf("fileoffs=%08x, marker=%02x,leng=%d",((int32_t)kfileptr)-((int32_t)kfilebuf)-2,marker,leng);
+		//printf("fileoffs=%08x, marker=%02x,leng=%d",((intptr_t)kfileptr)-((intptr_t)kfilebuf)-2,marker,leng);
 		switch(marker)
 		{
 			case 0xc0: case 0xc1: case 0xc2:
@@ -1970,13 +1970,13 @@ static int32_t kgifrend (const char *kfilebuf, int32_t kfilelength,
 		xx[3] = min(daglobxoffs+xsiz      ,daxres); yy[3] = min(daglobyoffs+ysiz      ,dayres);
 
 		lptr = (int32_t *)(yy[0]*dabytesperline+daframeplace);
-		for(y=yy[0];y<yy[1];y++,lptr=(int32_t *)(((int32_t)lptr)+dabytesperline))
+		for(y=yy[0];y<yy[1];y++,lptr=(int32_t *)(((intptr_t)lptr)+dabytesperline))
 			for(x=xx[0];x<xx[3];x++) lptr[x] = backcol;
-		for(;y<yy[2];y++,lptr=(int32_t *)(((int32_t)lptr)+dabytesperline))
+		for(;y<yy[2];y++,lptr=(int32_t *)(((intptr_t)lptr)+dabytesperline))
 		{  for(x=xx[0];x<xx[1];x++) lptr[x] = backcol;
 			for(x=xx[2];x<xx[3];x++) lptr[x] = backcol;
 		}
-		for(;y<yy[3];y++,lptr=(int32_t *)(((int32_t)lptr)+dabytesperline))
+		for(;y<yy[3];y++,lptr=(int32_t *)(((intptr_t)lptr)+dabytesperline))
 			for(x=xx[0];x<xx[3];x++) lptr[x] = backcol;
 
 		daglobxoffs += xoff; //Offset bitmap image by extra amount
@@ -2513,7 +2513,7 @@ void kpgetdim (const char *buf, int32_t leng, int32_t *xsiz, int32_t *ysiz)
 		{
 			if (lptr[1] == LSWAPIB(0x52444849)) //IHDR
 				{ (*xsiz) = LSWAPIL(lptr[2]); (*ysiz) = LSWAPIL(lptr[3]); break; }
-			lptr = (int32_t *)((int32_t)lptr + LSWAPIL(lptr[0]) + 12);
+			lptr = (int32_t *)((intptr_t)lptr + LSWAPIL(lptr[0]) + 12);
 		}
 	}
 	else if ((ubuf[0] == 0xff) && (ubuf[1] == 0xd8)) //.JPG
@@ -3209,7 +3209,7 @@ kzreadplc0:;
 			if (kzfs.comptell == sizeof(olinbuf)) i = 0;
 			else if (kzfs.comptell < kzfs.compleng) i = kzfs.comptell-(sizeof(olinbuf)-4);
 			else i = kzfs.comptell-(kzfs.comptell%(sizeof(olinbuf)-4));
-			i += ((int32_t)&filptr[bitpos>>3])-((int32_t)(&olinbuf[0]));
+			i += ((intptr_t)&filptr[bitpos>>3])-((intptr_t)(&olinbuf[0]));
 			i = (i<<3)+(bitpos&7)-3;
 			if (gslidew) printf(" ULng:0x%08x CLng:0x%08x.%x",gslidew-ouncomppos,(i-ocomppos)>>3,((i-ocomppos)&7)<<1);
 			printf("\ntype:%d, Uoff:0x%08x Coff:0x%08x.%x",btype,gslidew,i>>3,(i&7)<<1);

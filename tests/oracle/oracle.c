@@ -153,7 +153,7 @@ int main(void) {
 	if (initvoxlap() < 0) { fprintf(stderr, "initvoxlap failed\n"); return 1; }
 
 	build_scene();
-	voxsetframebuffer((int32_t)(intptr_t)g_fb, BYTESPERLINE, XRES, YRES);
+	voxsetframebuffer((intptr_t)g_fb, BYTESPERLINE, XRES, YRES);
 
 	hf = fopen("hashes.txt", "w");
 	if (!hf) { fprintf(stderr, "cannot open hashes.txt\n"); return 2; }
