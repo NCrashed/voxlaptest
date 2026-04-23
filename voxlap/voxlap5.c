@@ -225,17 +225,19 @@ int32_t zbufoff;
 #define gi1 (((int32_t *)&gi)[1])
 
 #ifdef _MSC_VER
-
 #include <intrin.h>  /* _byteswap_ulong, __cpuid */
-
 #pragma warning(disable:4799) //I know how to use EMMS
+#endif
+
+/* --- Arithmetic / FP helpers ---------------------------------------
+ * These were MSVC inline-asm stubs through Stage 2. Stage 3 replaced
+ * every body with portable C: bit-exact for the integer ops on any
+ * LLP64/LP64 target, and close-enough for sin/cos/round (hash-
+ * neutral on the MSVC CI runner because the CRT still reaches for
+ * x87 fsincos/fistp behind these libm calls). */
 
 static _inline void fcossin (float a, float *c, float *s)
 {
-	/* The original x87 fsincos produces both results from one
-	 * microcoded op; modern compilers recognise the cosf+sinf pair
-	 * and merge them into a libm sincosf where available. Results
-	 * may not be bit-identical to fsincos on the same MSVC build. */
 	*c = cosf(a);
 	*s = sinf(a);
 }
@@ -319,10 +321,6 @@ static _inline void clearbuf (void *d, int32_t c, int32_t a)
 	int32_t i;
 	for (i = 0; i < c; i++) p[i] = a;
 }
-
-#else
-#pragma message ("Compiler says it isn't Visual C.")
-#endif
 
 	//if (a < 0) return(0); else if (a > b) return(b); else return(a);
 static _inline int32_t lbound0 (int32_t a, int32_t b) //b MUST be >= 0
