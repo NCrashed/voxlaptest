@@ -9,7 +9,7 @@ on:
 
 jobs:
   windows-msvc-x86:
-    name: Windows MSVC x86 (oracle build + run)
+    name: Windows MSVC x86 (CMake + oracle)
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -19,52 +19,35 @@ jobs:
         with:
           arch: x86
 
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Build voxlap.dll (Release | Win32)
+      - name: Configure (CMake, Ninja, Release)
         shell: cmd
-        run: >
-          msbuild voxlap\voxlap.vcxproj
-          /p:Configuration=Release
-          /p:Platform=Win32
-          /p:PlatformToolset=v143
-          /p:WindowsTargetPlatformVersion=10.0
-          /m
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-      - name: Locate build outputs
+      - name: Build
         shell: cmd
-        run: dir /s /b voxlap\*.dll voxlap\*.lib voxasm\*.lib
+        run: cmake --build build
 
-      - name: Build oracle.exe
+      - name: Inspect build outputs
         shell: cmd
-        # /MT matches voxlap.dll's RuntimeLibrary=MultiThreaded (static CRT).
-        # /J matches the DLL's unsigned-char default so char compares agree.
-        run: >
-          cl /nologo /O2 /MT /J /W3 /D_CRT_SECURE_NO_WARNINGS /I voxlap
-          /Fe:tests\oracle\oracle.exe
-          /Fo:tests\oracle\oracle.obj
-          tests\oracle\oracle.c
-          voxlap\Release\voxlap.lib
+        run: dir /s /b build\bin
 
-      - name: Stage oracle runtime deps
+      - name: Run oracle (writes hashes.txt + PNGs to oracle-run)
         shell: cmd
-        run: copy /y voxlap\Release\voxlap.dll tests\oracle\voxlap.dll
+        # oracle.exe writes its outputs to the CWD. Run from oracle-run so
+        # the CI artifact upload has a stable path. voxlap.dll sits next
+        # to oracle.exe in build/bin, so PATH lookup finds it via CWD.
+        working-directory: build\oracle-run
+        run: ..\bin\oracle.exe
 
-      - name: Run oracle (produces hashes.txt + PNGs)
-        shell: cmd
-        working-directory: tests\oracle
-        run: oracle.exe
-
-      - name: Diff hashes against golden (if committed)
+      - name: Diff hashes against golden
         shell: bash
         run: |
           if [ -f tests/oracle/golden-hashes.txt ]; then
             echo "Comparing against frozen golden-hashes.txt:"
-            diff -u tests/oracle/golden-hashes.txt tests/oracle/hashes.txt
+            diff -u tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt
           else
             echo "No tests/oracle/golden-hashes.txt yet — this run establishes the baseline."
-            cat tests/oracle/hashes.txt
+            cat build/oracle-run/hashes.txt
           fi
 
       - name: Upload oracle artifacts
@@ -73,35 +56,54 @@ jobs:
         with:
           name: oracle-windows-msvc-x86
           path: |
-            tests/oracle/hashes.txt
-            tests/oracle/*.png
+            build/oracle-run/hashes.txt
+            build/oracle-run/*.png
 
   linux-gcc:
-    name: Linux GCC (placeholder — port lands in Stage 1)
+    name: Linux GCC (CMake configure + build, expected fail at link)
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
         run: gcc --version
-      - name: Report port status
-        run: echo "Linux GCC build arrives with CMake in Stage 1 of PORTING.md."
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure (CMake)
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc
+      - name: Build
+        # Expected to fail until Stage 3 replaces the MSVC inline asm in
+        # voxlap5.c and Stage 4 replaces v5.asm / voxasm. Left non-fatal
+        # via continue-on-error on the job so we can watch it go green
+        # as the port progresses.
+        run: cmake --build build
 
   linux-clang:
-    name: Linux Clang (placeholder — port lands in Stage 1)
+    name: Linux Clang (CMake configure + build, expected fail at link)
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
         run: clang --version
-      - name: Report port status
-        run: echo "Linux Clang build arrives with CMake in Stage 1 of PORTING.md."
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure (CMake)
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang
+      - name: Build
+        run: cmake --build build
 
   macos-clang:
-    name: macOS Clang (placeholder — port lands in Stage 1)
+    name: macOS Clang (CMake configure + build, expected fail at link)
     runs-on: macos-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
         run: clang --version
-      - name: Report port status
-        run: echo "macOS Clang build arrives with CMake in Stage 1 of PORTING.md."
+      - name: Install Ninja
+        run: brew install ninja
+      - name: Configure (CMake)
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
