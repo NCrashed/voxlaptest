@@ -69,6 +69,14 @@ static void build_scene(void) {
 	setMaxScanDistToMax();
 	set_fogcol((long)BR(0x87ceeb));
 
+	/* Flatten per-face shading. Voxlap's default darkens each of the six
+	 * voxel faces by a different amount; with our skybox-style enclosure
+	 * those shade differences turn the receding inside faces of the
+	 * perimeter walls into a "columns street" of dark vertical bars.
+	 * The signature is (x-, x+, y-, y+, z-, z+); 0 = no darkening per
+	 * face, matching game.c's uniform-shading preset. */
+	setsideshades(0, 0, 0, 0, 0, 0);
+
 	set_colfunc(curcolfunc);
 	set_jitamount(0);
 
