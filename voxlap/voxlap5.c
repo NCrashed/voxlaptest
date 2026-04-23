@@ -1282,31 +1282,33 @@ deletez:;
 #endif
 }
 
-#ifdef _MSC_VER
-
+/* mmxcoloradd / mmxcolorsub are saturated byte add / subtract of `*a`
+ * against the low four bytes of `flashbrival`. The original MMX asm was
+ * a single paddusb / psubusb against an mm-loaded register; the per-byte
+ * C loop below emits whatever SIMD or scalar the compiler chooses but
+ * produces bit-identical output on little-endian x86 (voxlap's only
+ * supported byte order). */
 static _inline void mmxcoloradd (int32_t *a)
 {
-	_asm
-	{
-		mov eax, a
-		movd mm0, [eax]
-		paddusb mm0, flashbrival
-		movd [eax], mm0
+	uint8_t *dst = (uint8_t *)a;
+	const uint8_t *src = (const uint8_t *)&flashbrival;
+	int32_t i;
+	for (i = 0; i < 4; i++) {
+		uint32_t sum = (uint32_t)dst[i] + src[i];
+		dst[i] = sum > 255 ? 255 : (uint8_t)sum;
 	}
 }
 
 static _inline void mmxcolorsub (int32_t *a)
 {
-	_asm
-	{
-		mov eax, a
-		movd mm0, [eax]
-		psubusb mm0, flashbrival
-		movd [eax], mm0
+	uint8_t *dst = (uint8_t *)a;
+	const uint8_t *src = (const uint8_t *)&flashbrival;
+	int32_t i;
+	for (i = 0; i < 4; i++) {
+		int32_t diff = (int32_t)dst[i] - (int32_t)src[i];
+		dst[i] = diff < 0 ? 0 : (uint8_t)diff;
 	}
 }
-
-#endif
 
 static _inline void addusb (char *a, int32_t b)
 {

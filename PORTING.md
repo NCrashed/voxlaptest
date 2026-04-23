@@ -117,6 +117,17 @@ Approach:
 
 Risk: the MMX rasterizer uses subtle fixed-point tricks and register pairing. Budget for off-by-one color/depth bugs. Use screenshot diffs aggressively.
 
+**Stage 4 sub-plan** (2026-04-24). Each step lands as its own commit; the oracle's 7 frozen hashes are the regression net.
+
+| Step | Scope | Hash impact | Linux impact |
+|---|---|---|---|
+| 4.1 | `mmxcoloradd` / `mmxcolorsub` / `expandbit256` → portable C | Bit-exact (saturated byte add/sub, bit-RLE loop) | Helpers come out of `#ifdef _MSC_VER`; clears ~5 implicit-declaration errors |
+| 4.2 | Delete all `*_3dn` variants (per decision 2 — drop 3DNow). Gut `getcputype`'s dispatch use while keeping the function for diagnostics | Hash-neutral on modern CPUs (CI runner never selects `_3dn`) | Halves the inline-asm block count; removes 3DNow from `v5.asm` |
+| 4.3 | SSE point4d helpers (line ~9741+) → `<emmintrin.h>` SSE2 intrinsics | Bit-exact (same SSE2 instructions emitted) | Block compiles under `-msse2` on any x86-64 |
+| 4.4 | `drawboundcube_sse` sprite rasterizer → SSE2 intrinsics + scalar fallback | Target bit-exact; budget for re-freeze of the 3 sprite_* goldens | Sprite path renders on Linux/macOS |
+| 4.5 | `grouscanasm` (the 606-line MMX scanline) → scalar C + SSE2 | Re-freeze likely, probably all 7 poses | Terrain path renders on Linux/macOS |
+| 4.6 | Delete `voxasm/v5.asm`, remove `v5_asm_dep_unlock`, gut `getcputype`, drop `enable_language(ASM_MASM)` in CMake | Hash-neutral if 4.5 lands correctly | MASM no longer required — CMake can target non-MSVC toolchains end-to-end |
+
 ### Stage 5 — Rust bindings + Rust host (2–3 weeks)
 
 Replace the C# Voxlaptest frontend with a Rust-based alternative.
