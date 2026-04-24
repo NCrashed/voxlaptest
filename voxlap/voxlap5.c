@@ -12760,9 +12760,13 @@ static void grouscanasm_scalar (intptr_t vptr)
 
 drawfwall:
 	/* Front wall: fill pixels going left (decrementing ebx from c->i1). */
+	GROUSCAN_DBG(v, "drawfwall-enter v[1]=%d v[2]=%d v[3]=%d z1=%d c->i0=%p c->i1=%p "
+	                "cx1=%08x cy1=%08x ogx=%08x",
+	             (int)v[1], (int)v[2], (int)v[3], z1,
+	             (void *)c->i0, (void *)c->i1, cx1, cy1, ogx);
 	{
 		int32_t dv1 = (int32_t)v[1];
-		if (dv1 >= z1) goto drawcwall;
+		if (dv1 >= z1) { GROUSCAN_DBG(v, "drawfwall-skip (v[1]>=z1) ->drawcwall", 0); goto drawcwall; }
 		ebx = c->i1;
 	}
 loop0:
@@ -12773,12 +12777,16 @@ loop0:
 		uint32_t vox = *(const uint32_t *)(v + off * 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[wall_lane]);
 		gy_raw = gylookoff[z1];  /* NEW z1 */
+		GROUSCAN_DBG(v, "loop0 z1_new=%d off=%d vox=%08x color=%08x gy_raw=%08x",
+		             z1, off, vox, color, gy_raw);
 	}
 loop1:
 	{
 		/* Asm `jle endloop1` — exit the fill loop when the pmaddwd
 		 * sign test is ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
+		GROUSCAN_DBG(v, "loop1 cx1=%08x cy1=%08x test=%d %s",
+		             cx1, cy1, test, (test <= 0) ? "EXIT" : "write+advance");
 		if (test <= 0) goto endloop1;
 		/* psubd mm1, _gi — advance right-edge ray left */
 		cx1 -= gi0; cy1 -= gi1;
@@ -12789,6 +12797,7 @@ loop1:
 #endif
 		ebx--;
 		if (ebx >= c->i0) goto loop1;
+		GROUSCAN_DBG(v, "loop1-overshoot ebx<c->i0 ->predeletez", 0);
 		goto predeletez;
 	}
 endloop1:
@@ -12978,6 +12987,10 @@ intoslabloop:
 		gy_raw = gylookoff[v2 + 1];
 		int32_t test_hi = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
 		int32_t v0 = (int32_t)v[0];
+		GROUSCAN_DBG(v, "intoslab v[0]=%d v[1]=%d v[2]=%d v[3]=%d "
+		                "z0=%d z1=%d ogx=%08x cx0=%08x cy0=%08x gy_raw=%08x test_hi=%d",
+		             (int)v[0], (int)v[1], (int)v[2], (int)v[3],
+		             z0, z1, ogx, cx0, cy0, gy_raw, test_hi);
 		/* Asm `jg findslabloop` — test > 0 means the slab is still
 		 * above the ray, skip to the next slab. Otherwise the slab
 		 * intersects and we test whether the NEXT slab also does
@@ -12986,8 +12999,12 @@ intoslabloop:
 			int32_t next_v3 = (int32_t)v[v0 * 4 + 3];
 			gy_raw = gylookoff[next_v3];
 			int32_t test_next = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
+			GROUSCAN_DBG(v, "intoslab-intersect next_v3=%d cx1=%08x cy1=%08x "
+			                "gy_raw_next=%08x test_next=%d decision=%s",
+			             (int)next_v3, cx1, cy1, gy_raw, test_next,
+			             (test_next <= 0) ? "single-slab->drawfwall" : "SPLIT");
 			/* Asm `jle drawfwall` — single-slab case, no split. */
-			if (test_next <= 0) goto drawfwall;
+			if (test_next <= 0) { GROUSCAN_DBG_TICK(); goto drawfwall; }
 
 			GROUSCAN_DBG(v, "split-enter v[1]=%d v[2]=%d v[3]=%d v0=%d next_v3=%d "
 			                "z0=%d z1=%d ogx=%08x gx=%08x lane=%d "
