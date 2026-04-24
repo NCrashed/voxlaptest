@@ -12967,11 +12967,15 @@ intoslabloop:
 			if (ce >= &cf[191]) goto retsub;
 			ce++;
 
-			/* Shift entries in (c, ce] up by one slot so c+1 becomes
-			 * a duplicate of c. */
+			/* Shift entries in [c, ce-1] up by one slot so c+1 becomes
+			 * a duplicate of c. Matches asm's beginsertloop, whose last
+			 * iteration copies [esp] (= c's data) into [esp+32] (= c+1)
+			 * — the `ja` in `cmp eax, esp; ja beginsertloop` keeps the
+			 * loop running until eax == esp after the decrement, so the
+			 * c→c+1 copy happens on the final pass. */
 			{
 				cftype *p;
-				for (p = ce; p > c + 1; p--) *p = *(p - 1);
+				for (p = ce; p > c; p--) *p = *(p - 1);
 			}
 
 			/* Now c[1] is a clone of c. Overwrite the fields that the
