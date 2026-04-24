@@ -59,6 +59,59 @@ jobs:
             build/oracle-run/hashes.txt
             build/oracle-run/*.png
 
+  windows-msvc-x86-scalar-grouscan:
+    # Stage 4.5b.6 shakedown: same build as the primary Windows job, but with
+    # -DVOXLAP_SCALAR_GROUSCAN=ON so voxlap uses the scalar C port of
+    # grouscanasm instead of the MMX routine in v5.asm. Goldens are still
+    # frozen against the asm path, so a hash diff here is expected until the
+    # scalar port is proven pixel-identical (or goldens get refrozen). Job is
+    # non-fatal — the asm job above stays the gate; this one exists to surface
+    # the diff + upload PNGs for visual comparison.
+    name: Windows MSVC x86 scalar grouscan (flag ON, non-fatal)
+    runs-on: windows-2022
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC x86 dev environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Configure (CMake, Ninja, Release, VOXLAP_SCALAR_GROUSCAN=ON)
+        shell: cmd
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DVOXLAP_SCALAR_GROUSCAN=ON
+
+      - name: Build
+        shell: cmd
+        run: cmake --build build
+
+      - name: Run oracle (writes hashes.txt + PNGs to oracle-run)
+        shell: cmd
+        working-directory: build\oracle-run
+        run: ..\bin\oracle.exe
+
+      - name: Show scalar hashes + diff against asm-frozen golden
+        shell: bash
+        # Non-fatal diff — drift is expected while the scalar port is being
+        # shaken down. `|| true` keeps the step green so the artifact upload
+        # below still runs and the PNGs are available for visual inspection.
+        run: |
+          echo "Scalar grouscan hashes:"
+          cat build/oracle-run/hashes.txt
+          echo ""
+          echo "Diff vs asm-frozen golden-hashes.txt (drift expected during 4.5b shakedown):"
+          diff -u tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt || true
+
+      - name: Upload oracle artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-windows-msvc-x86-scalar-grouscan
+          path: |
+            build/oracle-run/hashes.txt
+            build/oracle-run/*.png
+
   linux-gcc:
     name: Linux GCC (CMake configure + build, expected fail at link)
     runs-on: ubuntu-latest
