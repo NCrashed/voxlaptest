@@ -2,6 +2,6 @@ north  409ae24871dfe474
 east  fd575e24449c9c53
 diag_down  41a470e50a57f65c
 high_down  13131fc5e975c483
-sprite_front  3ff938a1b77092af
-sprite_above  8c0bc95672062038
-sprite_iso  f7ad29104d5872d2
+sprite_front  b7ab71e368e97def
+sprite_above  24dd7a8f42001332
+sprite_iso  0b0ac6413dae7dca
