@@ -12664,17 +12664,17 @@ static void grouscanasm_scalar (intptr_t vptr)
 	 * the voxel slab head for this column; if it matches our input
 	 * vptr, the passed slab IS the top of the column → jmp drawflor.
 	 * Otherwise we're below the top → jmp drawceil. */
+	/* Draw-phase shared state. Declared before the dispatch goto so
+	 * initialisers aren't skipped on `goto drawflor/drawceil`. */
+	uint32_t mm5_tail = 0;  /* matches asm's mm5 register carry across calls */
+	castdat *ebx = NULL;
+	uint32_t color = 0;
+	int32_t gy_raw = 0;
+	int32_t off = 0;
+
 	ixy_sptr_col = (const unsigned char *const *)(intptr_t)gpixy;
 	if (v == *ixy_sptr_col) goto drawflor;
 	goto drawceil;
-
-	/* A shared pixel-colour carry across all draw phases, matching the
-	 * asm's mm5 register state which persists across punpcklbw calls. */
-	uint32_t mm5_tail = 0;
-	castdat *ebx;
-	uint32_t color;
-	int32_t gy_raw;
-	int32_t off;
 
 drawfwall:
 	/* Front wall: fill pixels going left (decrementing ebx from c->i1). */
@@ -12694,8 +12694,11 @@ loop0:
 	}
 loop1:
 	{
+		/* C fallback pattern: `while (dmulrethigh(...) < 0) draw`.
+		 * Asm's `jle endloop1` exits on != draw; same condition via
+		 * dmulrethigh. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-		if (test <= 0) goto endloop1;
+		if (test >= 0) goto endloop1;
 		/* psubd mm1, _gi — advance right-edge ray left */
 		cx1 -= gi0; cy1 -= gi1;
 		/* Store pixel + depth. */
@@ -12737,8 +12740,9 @@ loop2:
 	}
 loop3:
 	{
+		/* C fallback: `while (dmulrethigh(...) >= 0) draw`. Exit when < 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
-		if (test > 0) goto endloop3;
+		if (test < 0) goto endloop3;
 		cx0 += gi0; cy0 += gi1;
 		ebx->col = (int32_t)color;
 #if (USEZBUFFER == 1)
@@ -12755,23 +12759,71 @@ endloop3:
 	/* fall through to predrawceil */
 
 predrawceil:
-	/* 4.5b.3b — ceiling fill. */
-	goto retsub;
+	/* Swap mm6 halves — makes what was "gx" (mm6.int32[1]) into mm6.int32[0]
+	 * so the subsequent test uses it. In our vars: swap ogx ↔ gx. */
+	{ int32_t tmp = ogx; ogx = gx; gx = tmp; }
+	/* fall through */
 
 drawceil:
-	/* 4.5b.3b — ceiling fill entry. */
-	goto retsub;
+	gy_raw = gylookoff[z0];
+drawceilloop:
+	{
+		/* C fallback (line 1264): `while (dmulrethigh(...) >= 0) draw`.
+		 * Exit when < 0 → goto drawflor. */
+		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
+		if (test < 0) goto drawflor;
+		cx0 += gi0; cy0 += gi1;
+		/* Ceiling colour = voxel ABOVE the slab top = previous slab's
+		 * last voxel = [v - 4] in the current linked-list layout. */
+		uint32_t vox = *(const uint32_t *)(v - 4);
+		color = grouscan_shade(vox, &mm5_tail, &gcsub[2]);
+		c->i0->col = (int32_t)color;
+#if (USEZBUFFER == 1)
+		c->i0->dist = ogx;
+#endif
+		c->i0++;
+		if (c->i0 <= c->i1) goto drawceilloop;
+		goto deletez;
+	}
 
 predrawflor:
-	/* 4.5b.3b — floor fill. */
-	goto retsub;
+	{ int32_t tmp = ogx; ogx = gx; gx = tmp; }
+	/* fall through */
 
 drawflor:
-	/* 4.5b.3b — floor fill entry. */
+	gy_raw = gylookoff[z1];
+drawflorloop:
+	{
+		/* C fallback (line 1271): `while (dmulrethigh(...) < 0) draw`.
+		 * Exit when >= 0. */
+		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
+		if (test >= 0) goto enddrawflor;
+		cx1 -= gi0; cy1 -= gi1;
+		/* Floor colour = top voxel of CURRENT slab = [v + 4]. */
+		uint32_t vox = *(const uint32_t *)(v + 4);
+		color = grouscan_shade(vox, &mm5_tail, &gcsub[3]);
+		c->i1->col = (int32_t)color;
+#if (USEZBUFFER == 1)
+		c->i1->dist = ogx;
+#endif
+		c->i1--;
+		if (c->i1 >= c->i0) goto drawflorloop;
+		goto deletez;
+	}
+
+enddrawflor:
+	/* 4.5b.4 — afterdelete: pop cfasm entry, step column, find next
+	 * slab. Stubbed for now → retsub ends the scanline. */
 	goto retsub;
 
 predeletez:
-	/* 4.5b.4 — entry-point variant of deletez that swaps mm6 halves. */
+	/* predeletez swaps mm6 halves before falling into deletez. */
+	{ int32_t tmp = ogx; ogx = gx; gx = tmp; }
+	/* fall through */
+
+deletez:
+	/* 4.5b.4 — remove current cfasm entry, shift rest down, re-enter
+	 * afterdelete. Stubbed → retsub. */
 	goto retsub;
 
 retsub:
