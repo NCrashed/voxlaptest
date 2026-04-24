@@ -12510,28 +12510,102 @@ void uninitvoxlap ()
 }
 
 #ifdef VOXLAP_SCALAR_GROUSCAN
-/* Scalar C port of _grouscanasm (voxasm/v5.asm, lines 172-722).
- * Specification: voxasm/GROUSCANASM.md.
+/* Scalar C port of _grouscanasm (voxasm/v5.asm). See
+ * voxasm/GROUSCANASM.md for the spec.
  *
- * Stage 4.5b infrastructure only: this is a no-op stub. Enabling the
- * CMake flag right now renders black scanlines for every column — the
- * goal of this commit is just to land the scaffolding (call-site
- * dispatch, CMake toggle, function signature) so subsequent commits
- * can fill in the body label-group by label-group without touching
- * the build system again.
- *
- * Body will come in sub-commits:
- *   4.5b.2 — prologue + cfasm pseudo-stack data model + drawflor/ceil
- *            dispatch on entry.
+ * Body landing in sub-commits:
+ *   4.5b.2 — this commit: prologue + cfasm data model + dispatch
+ *            skeleton (all draw phases are stubs that jump to retsub).
  *   4.5b.3 — wall / ceiling / floor fill loops.
  *   4.5b.4 — findslabloop, split-on-next-intersecting-slab, deletez.
  *   4.5b.5 — remiporend (mip transition) + startsky (sky fill).
- *   4.5b.6 — flip CMake default to ON, refreeze goldens if needed,
- *            delete the asm and enter 4.6. */
+ *   4.5b.6 — flip CMake default to ON, refreeze goldens, delete asm.
+ *
+ * Control-flow fidelity: this function uses gotos to mirror the asm's
+ * label structure exactly. That pattern is explicitly chosen over
+ * structured C because the asm's control graph isn't reducible — e.g.
+ * `drawflor` is both an entry label (from the prologue's initial
+ * dispatch) and a re-entry target (from `drawceilloop` on failed
+ * sign-test). Keeping the labels lets each asm block have a one-to-one
+ * C counterpart for easier auditing. */
 static void grouscanasm_scalar (intptr_t vptr)
 {
-	(void)vptr;
-	/* TODO: 4.5b.2+ — see voxasm/GROUSCANASM.md */
+	const unsigned char *v = (const unsigned char *)vptr;   /* edi */
+	const unsigned char *const *ixy_sptr_col;               /* [esi] target */
+	cftype *c;                                              /* esp+2048 in asm */
+	cftype *ce;                                             /* `ce` in asm */
+	int32_t z0, z1;                                         /* ecx, edx */
+	int32_t cx0, cy0, cx1, cy1;                             /* mm0, mm1 */
+	int32_t gx, ogx;                                        /* mm6 lanes */
+	int32_t lane;                                           /* ebp, 0 or 1 */
+	int32_t ngxmax;                                         /* local */
+	const int32_t *gylookoff;                               /* pointer into gylookup */
+	int32_t gmipcnt;                                        /* 0..gmipnum-1 */
+	(void)v; (void)ixy_sptr_col;                            /* silence unused in 4.5b.2 */
+	(void)z0; (void)z1; (void)cx0; (void)cy0; (void)cx1; (void)cy1;
+	(void)gx; (void)ogx; (void)lane;
+	(void)ngxmax; (void)gylookoff; (void)gmipcnt;
+
+	/* --- Prologue ---
+	 * Seed active stack. In the asm, the seed sits at cfasm[4096..]
+	 * which is `cf[128]` in C-land (32-byte entries × 128). The caller
+	 * (opticast) writes cf[128].{i0,i1,z0,z1,cx0,cy0,cx1,cy1} before
+	 * invoking us; our job here is to cache those values in local
+	 * scalars and start walking. */
+	c  = &cf[128];
+	ce = &cf[128];
+	z0 = c->z0;
+	z1 = c->z1;
+	cx0 = c->cx0; cy0 = c->cy0;
+	cx1 = c->cx1; cy1 = c->cy1;
+
+	gylookoff = gylookup;
+	gmipcnt   = 0;
+
+	/* ngxmax = min(gxmax, gxmip) when multiple mips exist. */
+	ngxmax = gxmax;
+	if (gmipnum > 1 && gxmip < ngxmax) ngxmax = gxmip;
+
+	/* Pick the leading raycast lane (smaller gpz wins) and seed gx
+	 * from it; ogx is the other lane's previous value (0 here since
+	 * we haven't stepped yet — becomes meaningful after the first
+	 * column advance). Asm stores both as int32 with low-16 masked
+	 * off, so we mimic that with `& 0xFFFF0000`. */
+	lane = (gpz[1] < gpz[0]) ? 1 : 0;
+	gx   = gpz[lane] & (int32_t)0xFFFF0000u;
+	ogx  = 0;
+	gpz[lane] += gdz[lane];
+
+	/* esi in asm points at gpixy which dereferences the sptr entry
+	 * for the current column. `*(const unsigned char **)gpixy` yields
+	 * the voxel slab head for this column; if it matches our input
+	 * vptr, the passed slab IS the top of the column → jmp drawflor.
+	 * Otherwise we're below the top → jmp drawceil. */
+	ixy_sptr_col = (const unsigned char *const *)(intptr_t)gpixy;
+	if (v == *ixy_sptr_col) goto drawflor;
+	goto drawceil;
+
+drawfwall:
+	/* 4.5b.3 — front wall fill. For now: return. */
+	goto retsub;
+
+drawcwall:
+	/* 4.5b.3 — back wall fill. Falls through from drawfwall. */
+	goto retsub;
+
+drawceil:
+	/* 4.5b.3 — ceiling fill. */
+	goto retsub;
+
+drawflor:
+	/* 4.5b.3 — floor fill. */
+	goto retsub;
+
+retsub:
+	/* _mm_empty() is a no-op here because the scalar port uses zero
+	 * MMX registers; kept as a comment so Stage 4.5b.6 doesn't forget
+	 * the asm had one before v5.asm's deletion. */
+	return;
 }
 #endif
 
