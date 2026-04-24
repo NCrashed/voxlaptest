@@ -12573,6 +12573,46 @@ static inline uint32_t grouscan_shade (uint32_t vox, uint32_t *tail,
 	}
 }
 
+/* Mip-level tables used by remiporend. Literal values from v5.asm's
+ * gxmipk/gymipk; gamipk and gylut are kept as offsets (bytes / int32
+ * indices) so we can compose them against `sptr` and `gylookup` at
+ * use-site rather than hard-coding a pointer base. */
+static const int32_t grouscan_gxmipk[10] = {
+	0x0FFE, 0x07FE, 0x03FE, 0x01FE, 0x00FE,
+	0x007E, 0x003E, 0x001E, 0x000E, 0x0006
+};
+static const int32_t grouscan_gymipk[10] = {
+	0xFFE000, 0x3FF000, 0x0FF800, 0x03FC00, 0x00FE00,
+	0x003F00, 0x000F80, 0x0003C0, 0x0000E0, 0x000030
+};
+/* Cumulative byte offsets from _sptr for each mip's sub-array; each
+ * mip N is (VSID>>N)*(VSID>>N) pointers of 4 bytes (32-bit target). */
+static const intptr_t grouscan_gamipk_offsets[10] = {
+	0,
+	((intptr_t)2048 * 2048) * 4,
+	((intptr_t)2048 * 2048 + 1024 * 1024) * 4,
+	((intptr_t)2048 * 2048 + 1024 * 1024 + 512 * 512) * 4,
+	((intptr_t)2048 * 2048 + 1024 * 1024 + 512 * 512 + 256 * 256) * 4,
+	((intptr_t)2048 * 2048 + 1024 * 1024 + 512 * 512 + 256 * 256 + 128 * 128) * 4,
+	((intptr_t)2048 * 2048 + 1024 * 1024 + 512 * 512 + 256 * 256 + 128 * 128 + 64 * 64) * 4,
+	((intptr_t)2048 * 2048 + 1024 * 1024 + 512 * 512 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32) * 4,
+	((intptr_t)2048 * 2048 + 1024 * 1024 + 512 * 512 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16) * 4,
+	((intptr_t)2048 * 2048 + 1024 * 1024 + 512 * 512 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8) * 4
+};
+/* gylut: int32 indices into gylookup (not byte offsets). */
+static const int32_t grouscan_gylut_offsets[10] = {
+	0,
+	4*1 + 512,
+	4*2 + 512 + 256,
+	4*3 + 512 + 256 + 128,
+	4*4 + 512 + 256 + 128 + 64,
+	4*5 + 512 + 256 + 128 + 64 + 32,
+	4*6 + 512 + 256 + 128 + 64 + 32 + 16,
+	4*7 + 512 + 256 + 128 + 64 + 32 + 16 + 8,
+	4*8 + 512 + 256 + 128 + 64 + 32 + 16 + 8 + 4,
+	4*9 + 512 + 256 + 128 + 64 + 32 + 16 + 8 + 4 + 2
+};
+
 /* --- Cross-product sign test ---
  *
  * The asm's `pmaddwd mm7, mm3; test eax, eax; jle/jg` is algebraically
@@ -12616,6 +12656,7 @@ static void grouscanasm_scalar (intptr_t vptr)
 	const unsigned char *const *ixy_sptr_col;               /* [esi] target */
 	cftype *c;                                              /* esp+2048 in asm */
 	cftype *ce;                                             /* `ce` in asm */
+	cftype *c_presync = NULL;                               /* ebx in asm — pre-pop c slot */
 	int32_t z0, z1;                                         /* ecx, edx */
 	int32_t cx0, cy0, cx1, cy1;                             /* mm0, mm1 */
 	int32_t gx, ogx;                                        /* mm6 lanes */
@@ -12819,7 +12860,7 @@ afterdelete:
 	 * next entry in the same column (skipixy). Otherwise step to the
 	 * next voxel column (ixy_sptr_col advances via gixy[lane]). */
 	{
-		cftype *c_presync = c;
+		c_presync = c;  /* shared with remiporend's skipixy2 route */
 		c--;
 		if (c >= &cf[128]) goto skipixy_with_presync;
 
@@ -12983,12 +13024,118 @@ deletez:
 	goto afterdelete;
 
 remiporend:
-	/* 4.5b.5b — full mip-level transition (halving gdz/gixy, re-masking
-	 * voxel pointer via gxmipk/gymipk/gamipk, halving cfasm z values)
-	 * is deferred. For now drop straight to startsky: scenes with
-	 * multi-mip columns render the first-mip pixels correctly plus
-	 * sky fill past ngxmax, losing the mip-2+ detail at the horizon. */
-	goto startsky;
+	/* Mip-level transition. If we've exhausted all mips, fall to
+	 * startsky. Otherwise: double gdz for both lanes (with saturation),
+	 * halve gixy[1], re-index the voxel column pointer (ixy_sptr_col)
+	 * via the per-mip mask/offset tables, update gylookoff, halve every
+	 * cfasm entry's z0/z1, double ngxmax (saturating at gxmax), and
+	 * then re-enter skipixy2 as if we'd column-stepped. */
+	{
+		if ((uint8_t)(gmipcnt + 1) >= (uint8_t)gmipnum) goto startsky;
+		gmipcnt = (int32_t)((uint8_t)(gmipcnt + 1));
+
+		intptr_t esi_rel = (intptr_t)ixy_sptr_col
+		                 - (intptr_t)(const unsigned char *)sptr;
+
+		/* --- gdz[0] adjust + saturating double ---
+		 * Asm uses the sign of `(esi_rel<<29) ^ gixy[0]` to decide
+		 * whether to add gdz[0] to gpz[0] (aligning to the coarser
+		 * grid's half-step), then doubles gdz[0] with overflow clamp. */
+		{
+			int32_t xor0 = (int32_t)((uint32_t)(int32_t)esi_rel << 29)
+			              ^ gixy[0];
+			int32_t dz = gdz[0];
+			if ((xor0 & (int32_t)0x80000000) == 0) gpz[0] += dz;
+			int32_t doubled = dz + dz;
+			if ((dz ^ doubled) < 0) {
+				/* signed overflow (dz positive, doubled negative, or vice versa) */
+				gpz[0] = 0x7FFFFFFF;
+				gdz[0] = 0;
+			} else {
+				gdz[0] = doubled;
+			}
+		}
+
+		/* Asm: save ecx here ("official place"). ecx is the active c's
+		 * z0 which fills would have modified; we stash it into the
+		 * c_presync memory slot so the halve-loop below operates on
+		 * the latest value. */
+		c_presync->z0 = z0;
+
+		/* --- gdz[1] adjust + saturating double ---
+		 * Shift amount for the lane-1 test is (gmipcnt + 17). */
+		{
+			int32_t sh = gmipcnt + 17;
+			int32_t xor1 = (int32_t)((uint32_t)(int32_t)esi_rel << sh)
+			              ^ gixy[1];
+			int32_t dz = gdz[1];
+			if ((xor1 & (int32_t)0x80000000) == 0) gpz[1] += dz;
+			int32_t doubled = dz + dz;
+			if ((dz ^ doubled) < 0) {
+				gpz[1] = 0x7FFFFFFF;
+				gdz[1] = 0;
+			} else {
+				gdz[1] = doubled;
+			}
+		}
+
+		/* --- Re-mask esi to the new-mip column pointer ---
+		 * Asm: shr esi, 2; and esi, gxmipk[mip*4]; and eax, gymipk[mip*4];
+		 *      lea esi, [eax + esi*2]; add esi, gamipk[mip*4]. */
+		{
+			int32_t esi_vox = (int32_t)((uint32_t)(int32_t)esi_rel >> 2);
+			int32_t x_bits = esi_vox & grouscan_gxmipk[gmipcnt];
+			int32_t y_bits = esi_vox & grouscan_gymipk[gmipcnt];
+			intptr_t new_rel = (intptr_t)y_bits + (intptr_t)x_bits * 2
+			                  + grouscan_gamipk_offsets[gmipcnt];
+			ixy_sptr_col = (const unsigned char *const *)(
+				(const unsigned char *)sptr + new_rel);
+		}
+
+		/* --- gylookoff shift to new mip's sub-range of gylookup --- */
+		gylookoff = gylookup + grouscan_gylut_offsets[gmipcnt];
+
+		/* --- Halve gixy[1] (signed arithmetic shift; sar in asm) --- */
+		gixy[1] >>= 1;
+
+		/* --- Halve every active cfasm entry's z0/z1 ---
+		 * z0 uses unsigned shift (shr, rounds down).
+		 * z1 uses (z1 + 1) >> 1 (rounds up via inc-then-shr). */
+		for (cftype *p = &cf[128]; p <= ce; p++) {
+			p->z0 = (int32_t)((uint32_t)p->z0 >> 1);
+			p->z1 = (int32_t)((uint32_t)(p->z1 + 1) >> 1);
+		}
+
+		/* --- Double ngxmax, saturating at gxmax --- */
+		if ((uint32_t)ngxmax >= (uint32_t)gxmax) goto startsky;
+		{
+			int32_t dn = ngxmax + ngxmax;
+			if (dn < 0 || dn >= gxmax) ngxmax = gxmax;
+			else ngxmax = dn;
+		}
+
+		/* --- Register fix-ups ---
+		 * Asm reloads ecx from the earlier save (now halved by the
+		 * loop above) and halves it again; we mirror that literally.
+		 * edx is halved in-place with round-up. */
+		z0 = c_presync->z0 >> 1;
+		z1 = (int32_t)((uint32_t)(z1 + 1) >> 1);
+
+		/* Recompute leading lane and do one more gpz advance. */
+		lane = (gpz[1] < gpz[0]) ? 1 : 0;
+		{
+			int32_t new_gpz = gpz[lane];
+			gx = new_gpz & (int32_t)0xFFFF0000u;
+			gpz[lane] += gdz[lane];
+		}
+
+		/* Reload v from the new column pointer. */
+		v = *ixy_sptr_col;
+
+		/* Reset current c to the top of the stack. */
+		c = ce;
+	}
+	goto skipixy2_sync_from_presync;
 
 startsky:
 	/* Fill every remaining cfasm entry's pixel range with sky. Two
