@@ -797,17 +797,12 @@ _kv6bytesperline dd 0
 
 PUBLIC _drawboundcubesseinit   ;Visual C entry point (pass by stack)
 _drawboundcubesseinit:
-	mov eax, _kv6frameplace
-	mov dword ptr [bcmod0-4], eax
-	mov eax, _kv6bytesperline
-	mov dword ptr [bcmod3-4], eax
-ifdef USEZBUFFER
-	;mov eax, _kv6bytesperline
-	mov dword ptr [bcmod2-4], eax
-	mov eax, _zbufoff
-	mov dword ptr [bcmod1-4], eax
-endif
-	ret       ;Visual C's _cdecl requires EBX,ESI,EDI,EBP to be preserved
+	; Init was self-modifying-code that patched immediate slots inside
+	; _drawboundcubesse (bcmod0..bcmod3). After Stage 4.4b the function
+	; body reads _kv6frameplace / _kv6bytesperline / _zbufoff directly
+	; from memory each call, so init is a no-op. Kept for ABI: voxlap5.c
+	; still calls drawboundcubesseinit() at engine startup.
+	ret
 
 ALIGN 16
 PUBLIC _drawboundcubesse       ;Visual C entry point (pass by stack)
@@ -831,85 +826,85 @@ _drawboundcubesse:
 
 	lea ecx, _ptfaces16[ecx*8]
 
-	movzx ebx, byte ptr [ecx+1] ;                           Ý
-	movzx edi, byte ptr [ecx+2] ;                           Ý
-	movaps xmm0, _caddasm[ebx]  ;xmm0: [ z0, z0, y0, x0]    Û
-	addps xmm0, xmm7            ;                           ÛÛ±
-	movaps xmm1, _caddasm[edi]  ;xmm1: [ z1, z1, y1, x1]    Û
-	addps xmm1, xmm7            ;                           ÛÛ±
-	movaps xmm6, xmm0           ;xmm6: [ z0, z0, y0, x0]    Û
-	movhlps xmm0, xmm1          ;xmm0: [ z0, z0, z1, z1]    Û
-	movlhps xmm1, xmm6          ;xmm1: [ y0, x0, y1, x1]    Û
-	rcpps xmm0, xmm0            ;xmm6: [/z0,/z0,/z1,/z1]    ÛÛ
-	mulps xmm0, xmm1            ;xmm0: [sy0,sx0,sy1,sx1]    ÛÛ±±
+	movzx ebx, byte ptr [ecx+1] ;                           ï¿½
+	movzx edi, byte ptr [ecx+2] ;                           ï¿½
+	movaps xmm0, _caddasm[ebx]  ;xmm0: [ z0, z0, y0, x0]    ï¿½
+	addps xmm0, xmm7            ;                           ï¿½Û±
+	movaps xmm1, _caddasm[edi]  ;xmm1: [ z1, z1, y1, x1]    ï¿½
+	addps xmm1, xmm7            ;                           ï¿½Û±
+	movaps xmm6, xmm0           ;xmm6: [ z0, z0, y0, x0]    ï¿½
+	movhlps xmm0, xmm1          ;xmm0: [ z0, z0, z1, z1]    ï¿½
+	movlhps xmm1, xmm6          ;xmm1: [ y0, x0, y1, x1]    ï¿½
+	rcpps xmm0, xmm0            ;xmm6: [/z0,/z0,/z1,/z1]    ï¿½ï¿½
+	mulps xmm0, xmm1            ;xmm0: [sy0,sx0,sy1,sx1]    ï¿½Û±ï¿½
 
-	movzx ebx, byte ptr [ecx+3] ;                           Ý
-	movzx edi, byte ptr [ecx+4] ;                           Ý
-	movaps xmm2, _caddasm[ebx]  ;xmm2: [ z2, z2, y2, x2]    Û
-	addps xmm2, xmm7            ;                           ÛÛ±
-	movaps xmm3, _caddasm[edi]  ;xmm3: [ z3, z3, y3, x3]    Û
-	addps xmm3, xmm7            ;                           ÛÛ±
-	movaps xmm6, xmm2           ;xmm6: [ z2, z2, y2, x2]    Û
-	movhlps xmm2, xmm3          ;xmm2: [ z2, z2, z3, z3]    Û
-	movlhps xmm3, xmm6          ;xmm3: [ y2, x2, y3, x3]    Û
-	rcpps xmm2, xmm2            ;xmm6: [/z2,/z2,/z3,/z3]    ÛÛ
-	mulps xmm2, xmm3            ;xmm2: [sy2,sx2,sy3,sx3]    ÛÛ±±
+	movzx ebx, byte ptr [ecx+3] ;                           ï¿½
+	movzx edi, byte ptr [ecx+4] ;                           ï¿½
+	movaps xmm2, _caddasm[ebx]  ;xmm2: [ z2, z2, y2, x2]    ï¿½
+	addps xmm2, xmm7            ;                           ï¿½Û±
+	movaps xmm3, _caddasm[edi]  ;xmm3: [ z3, z3, y3, x3]    ï¿½
+	addps xmm3, xmm7            ;                           ï¿½Û±
+	movaps xmm6, xmm2           ;xmm6: [ z2, z2, y2, x2]    ï¿½
+	movhlps xmm2, xmm3          ;xmm2: [ z2, z2, z3, z3]    ï¿½
+	movlhps xmm3, xmm6          ;xmm3: [ y2, x2, y3, x3]    ï¿½
+	rcpps xmm2, xmm2            ;xmm6: [/z2,/z2,/z3,/z3]    ï¿½ï¿½
+	mulps xmm2, xmm3            ;xmm2: [sy2,sx2,sy3,sx3]    ï¿½Û±ï¿½
 
-	cvttps2pi mm0, xmm0         ;                           Û
-	movhlps xmm0, xmm0          ;                           Û
-	cvttps2pi mm2, xmm2         ;                           Û
-	cvttps2pi mm1, xmm0         ;                           Û
-	movhlps xmm2, xmm2          ;                           Û
-	packssdw mm0, mm1           ;                           Ý
-	movq mm1, mm0               ;                           Ý
-	cvttps2pi mm3, xmm2         ;                           Û
-	packssdw mm2, mm3           ;                           Ý
-	pminsw mm0, mm2             ;                           Ý
-	pmaxsw mm1, mm2             ;                           Ý
+	cvttps2pi mm0, xmm0         ;                           ï¿½
+	movhlps xmm0, xmm0          ;                           ï¿½
+	cvttps2pi mm2, xmm2         ;                           ï¿½
+	cvttps2pi mm1, xmm0         ;                           ï¿½
+	movhlps xmm2, xmm2          ;                           ï¿½
+	packssdw mm0, mm1           ;                           ï¿½
+	movq mm1, mm0               ;                           ï¿½
+	cvttps2pi mm3, xmm2         ;                           ï¿½
+	packssdw mm2, mm3           ;                           ï¿½
+	pminsw mm0, mm2             ;                           ï¿½
+	pmaxsw mm1, mm2             ;                           ï¿½
 
 	cmp byte ptr [ecx], 4
 	je short bcskip6case
 
-	movzx ebx, byte ptr [ecx+5] ;                           Ý
-	movzx edi, byte ptr [ecx+6] ;                           Ý
-	movaps xmm4, _caddasm[ebx]  ;xmm4: [ z4, z4, y4, x4]    Û
-	addps xmm4, xmm7            ;                           ÛÛ±
-	movaps xmm5, _caddasm[edi]  ;xmm5: [ z5, z5, y5, x5]    Û
-	addps xmm5, xmm7            ;                           ÛÛ±
-	movaps xmm6, xmm4           ;xmm6: [ z4, z4, y4, x4]    Û
-	movhlps xmm4, xmm5          ;xmm4: [ z4, z4, z5, z5]    Û
-	movlhps xmm5, xmm6          ;xmm5: [ y4, x4, y5, x5]    Û
-	rcpps xmm4, xmm4            ;xmm6: [/z4,/z4,/z5,/z5]    ÛÛ
-	mulps xmm4, xmm5            ;xmm4: [sy4,sx4,sy5,sx5]    ÛÛ±±
+	movzx ebx, byte ptr [ecx+5] ;                           ï¿½
+	movzx edi, byte ptr [ecx+6] ;                           ï¿½
+	movaps xmm4, _caddasm[ebx]  ;xmm4: [ z4, z4, y4, x4]    ï¿½
+	addps xmm4, xmm7            ;                           ï¿½Û±
+	movaps xmm5, _caddasm[edi]  ;xmm5: [ z5, z5, y5, x5]    ï¿½
+	addps xmm5, xmm7            ;                           ï¿½Û±
+	movaps xmm6, xmm4           ;xmm6: [ z4, z4, y4, x4]    ï¿½
+	movhlps xmm4, xmm5          ;xmm4: [ z4, z4, z5, z5]    ï¿½
+	movlhps xmm5, xmm6          ;xmm5: [ y4, x4, y5, x5]    ï¿½
+	rcpps xmm4, xmm4            ;xmm6: [/z4,/z4,/z5,/z5]    ï¿½ï¿½
+	mulps xmm4, xmm5            ;xmm4: [sy4,sx4,sy5,sx5]    ï¿½Û±ï¿½
 
-	cvttps2pi mm4, xmm4         ;                           Û
-	movhlps xmm4, xmm4          ;                           Û
-	cvttps2pi mm5, xmm4         ;                           Û
-	packssdw mm4, mm5           ;                           Ý
-	pminsw mm0, mm4             ; mm0: [my1,mx1,my0,mx0]    Ý
-	pmaxsw mm1, mm4             ; mm1: [My1,Mx1,My0,Mx0]    Ý
+	cvttps2pi mm4, xmm4         ;                           ï¿½
+	movhlps xmm4, xmm4          ;                           ï¿½
+	cvttps2pi mm5, xmm4         ;                           ï¿½
+	packssdw mm4, mm5           ;                           ï¿½
+	pminsw mm0, mm4             ; mm0: [my1,mx1,my0,mx0]    ï¿½
+	pmaxsw mm1, mm4             ; mm1: [My1,Mx1,My0,Mx0]    ï¿½
 bcskip6case:
 
-	pshufw mm2, mm0, 0eh        ; mm2: [   ,   ,my1,mx1]    Û
-	pshufw mm3, mm1, 0eh        ; mm3: [   ,   ,My1,Mx1]    Û
-	pminsw mm0, mm2             ; mm0: [  ?,  ?, my, mx]    Ý
-	pmaxsw mm1, mm3             ; mm1: [  ?,  ?, My, Mx]    Ý
-	punpckldq mm0, mm1          ; mm0: [ My, Mx, my, mx]    Ý
+	pshufw mm2, mm0, 0eh        ; mm2: [   ,   ,my1,mx1]    ï¿½
+	pshufw mm3, mm1, 0eh        ; mm3: [   ,   ,My1,Mx1]    ï¿½
+	pminsw mm0, mm2             ; mm0: [  ?,  ?, my, mx]    ï¿½
+	pmaxsw mm1, mm3             ; mm1: [  ?,  ?, My, Mx]    ï¿½
+	punpckldq mm0, mm1          ; mm0: [ My, Mx, my, mx]    ï¿½
 
 		;See SCRCLP2D.BAS for a derivation of these 4 lines:
-	paddsw mm0, mm6 ;_qsum0     ; mm0: ["+?,"+?,"+?,"+?]    Û
-	pmaxsw mm0, mm7 ;_qsum1     ; mm0: [sy1,sx1,sy0,sx0]    Û
-	pshufw mm1, mm0, 0eeh       ; mm1: [sy1,sx1,sy1,sx1]    Û
-	psubusw mm1, mm0            ; mm1: [  0,  0, dy, dx]    Ý
+	paddsw mm0, mm6 ;_qsum0     ; mm0: ["+?,"+?,"+?,"+?]    ï¿½
+	pmaxsw mm0, mm7 ;_qsum1     ; mm0: [sy1,sx1,sy0,sx0]    ï¿½
+	pshufw mm1, mm0, 0eeh       ; mm1: [sy1,sx1,sy1,sx1]    ï¿½
+	psubusw mm1, mm0            ; mm1: [  0,  0, dy, dx]    ï¿½
 		;kv6frameplace -= ((32767-yres)*bpl + (32767-xres)*4);
 
-	movd edx, mm1               ; edx: [ dy, dx]            Û
-	pmaddwd mm0, _qbplbpp       ; mm0: [      ?,   offs]    Û±± (=y*bpl+x*bpp)
-	movd ebx, mm1               ; ebx: [ dy, dx]            Ý
-	and edx, 0ffffh             ; ebx: [  0, dx]            Ý
-	jz short retboundcube       ;                           Ý
-	sub ebx, 65536              ;                           Ý
-	jc short retboundcube       ;                           Ý
+	movd edx, mm1               ; edx: [ dy, dx]            ï¿½
+	pmaddwd mm0, _qbplbpp       ; mm0: [      ?,   offs]    Û±ï¿½ (=y*bpl+x*bpp)
+	movd ebx, mm1               ; ebx: [ dy, dx]            ï¿½
+	and edx, 0ffffh             ; ebx: [  0, dx]            ï¿½
+	jz short retboundcube       ;                           ï¿½
+	sub ebx, 65536              ;                           ï¿½
+	jc short retboundcube       ;                           ï¿½
 
 	movzx edi, byte ptr [eax+7]
 	punpcklbw mm5, [eax]
@@ -918,13 +913,13 @@ bcskip6case:
 	packuswb mm5, mm5
 	movd edi, mm0               ; edi: offs
 
-	lea edi, [edi+edx*4+88888888h] ;_kv6frameplace
-bcmod0:
+	lea edi, [edi+edx*4]
+	add edi, dword ptr _kv6frameplace
 	neg edx
 ifdef USEZBUFFER
 	movhlps xmm0, xmm7
-	lea eax, [edi+88888888h] ;_zbufoff
-bcmod1:
+	mov eax, dword ptr _zbufoff
+	add eax, edi
 endif
 boundcubenextline:
 	mov ecx, edx
@@ -939,11 +934,9 @@ skipdrawpix:
 	inc ecx
 	jnz begstosb
 ifdef USEZBUFFER
-	add eax, 88888888h; _kv6bytesperline
-bcmod2:
+	add eax, dword ptr _kv6bytesperline
 endif
-	add edi, 88888888h ;_kv6bytesperline
-bcmod3:
+	add edi, dword ptr _kv6bytesperline
 
 	sub ebx, 65536
 	jnc short boundcubenextline
@@ -955,11 +948,9 @@ retboundcube:
 
 PUBLIC _drawboundcubenozsseinit   ;Visual C entry point (pass by stack)
 _drawboundcubenozsseinit:
-	mov eax, _kv6frameplace
-	mov dword ptr [bcmod0noz-4], eax
-	mov eax, _kv6bytesperline
-	mov dword ptr [bcmod3noz-4], eax
-	ret       ;Visual C's _cdecl requires EBX,ESI,EDI,EBP to be preserved
+	; See _drawboundcubesseinit â€” SMC eliminated, this is a no-op kept
+	; for ABI compat.
+	ret
 
 ALIGN 16
 PUBLIC _drawboundcubenozsse       ;Visual C entry point (pass by stack)
@@ -983,85 +974,85 @@ _drawboundcubenozsse:
 
 	lea ecx, _ptfaces16[ecx*8]
 
-	movzx ebx, byte ptr [ecx+1] ;                           Ý
-	movzx edi, byte ptr [ecx+2] ;                           Ý
-	movaps xmm0, _caddasm[ebx]  ;xmm0: [ z0, z0, y0, x0]    Û
-	addps xmm0, xmm7            ;                           ÛÛ±
-	movaps xmm1, _caddasm[edi]  ;xmm1: [ z1, z1, y1, x1]    Û
-	addps xmm1, xmm7            ;                           ÛÛ±
-	movaps xmm6, xmm0           ;xmm6: [ z0, z0, y0, x0]    Û
-	movhlps xmm0, xmm1          ;xmm0: [ z0, z0, z1, z1]    Û
-	movlhps xmm1, xmm6          ;xmm1: [ y0, x0, y1, x1]    Û
-	rcpps xmm0, xmm0            ;xmm6: [/z0,/z0,/z1,/z1]    ÛÛ
-	mulps xmm0, xmm1            ;xmm0: [sy0,sx0,sy1,sx1]    ÛÛ±±
+	movzx ebx, byte ptr [ecx+1] ;                           ï¿½
+	movzx edi, byte ptr [ecx+2] ;                           ï¿½
+	movaps xmm0, _caddasm[ebx]  ;xmm0: [ z0, z0, y0, x0]    ï¿½
+	addps xmm0, xmm7            ;                           ï¿½Û±
+	movaps xmm1, _caddasm[edi]  ;xmm1: [ z1, z1, y1, x1]    ï¿½
+	addps xmm1, xmm7            ;                           ï¿½Û±
+	movaps xmm6, xmm0           ;xmm6: [ z0, z0, y0, x0]    ï¿½
+	movhlps xmm0, xmm1          ;xmm0: [ z0, z0, z1, z1]    ï¿½
+	movlhps xmm1, xmm6          ;xmm1: [ y0, x0, y1, x1]    ï¿½
+	rcpps xmm0, xmm0            ;xmm6: [/z0,/z0,/z1,/z1]    ï¿½ï¿½
+	mulps xmm0, xmm1            ;xmm0: [sy0,sx0,sy1,sx1]    ï¿½Û±ï¿½
 
-	movzx ebx, byte ptr [ecx+3] ;                           Ý
-	movzx edi, byte ptr [ecx+4] ;                           Ý
-	movaps xmm2, _caddasm[ebx]  ;xmm2: [ z2, z2, y2, x2]    Û
-	addps xmm2, xmm7            ;                           ÛÛ±
-	movaps xmm3, _caddasm[edi]  ;xmm3: [ z3, z3, y3, x3]    Û
-	addps xmm3, xmm7            ;                           ÛÛ±
-	movaps xmm6, xmm2           ;xmm6: [ z2, z2, y2, x2]    Û
-	movhlps xmm2, xmm3          ;xmm2: [ z2, z2, z3, z3]    Û
-	movlhps xmm3, xmm6          ;xmm3: [ y2, x2, y3, x3]    Û
-	rcpps xmm2, xmm2            ;xmm6: [/z2,/z2,/z3,/z3]    ÛÛ
-	mulps xmm2, xmm3            ;xmm2: [sy2,sx2,sy3,sx3]    ÛÛ±±
+	movzx ebx, byte ptr [ecx+3] ;                           ï¿½
+	movzx edi, byte ptr [ecx+4] ;                           ï¿½
+	movaps xmm2, _caddasm[ebx]  ;xmm2: [ z2, z2, y2, x2]    ï¿½
+	addps xmm2, xmm7            ;                           ï¿½Û±
+	movaps xmm3, _caddasm[edi]  ;xmm3: [ z3, z3, y3, x3]    ï¿½
+	addps xmm3, xmm7            ;                           ï¿½Û±
+	movaps xmm6, xmm2           ;xmm6: [ z2, z2, y2, x2]    ï¿½
+	movhlps xmm2, xmm3          ;xmm2: [ z2, z2, z3, z3]    ï¿½
+	movlhps xmm3, xmm6          ;xmm3: [ y2, x2, y3, x3]    ï¿½
+	rcpps xmm2, xmm2            ;xmm6: [/z2,/z2,/z3,/z3]    ï¿½ï¿½
+	mulps xmm2, xmm3            ;xmm2: [sy2,sx2,sy3,sx3]    ï¿½Û±ï¿½
 
-	cvttps2pi mm0, xmm0         ;                           Û
-	movhlps xmm0, xmm0          ;                           Û
-	cvttps2pi mm2, xmm2         ;                           Û
-	cvttps2pi mm1, xmm0         ;                           Û
-	movhlps xmm2, xmm2          ;                           Û
-	packssdw mm0, mm1           ;                           Ý
-	movq mm1, mm0               ;                           Ý
-	cvttps2pi mm3, xmm2         ;                           Û
-	packssdw mm2, mm3           ;                           Ý
-	pminsw mm0, mm2             ;                           Ý
-	pmaxsw mm1, mm2             ;                           Ý
+	cvttps2pi mm0, xmm0         ;                           ï¿½
+	movhlps xmm0, xmm0          ;                           ï¿½
+	cvttps2pi mm2, xmm2         ;                           ï¿½
+	cvttps2pi mm1, xmm0         ;                           ï¿½
+	movhlps xmm2, xmm2          ;                           ï¿½
+	packssdw mm0, mm1           ;                           ï¿½
+	movq mm1, mm0               ;                           ï¿½
+	cvttps2pi mm3, xmm2         ;                           ï¿½
+	packssdw mm2, mm3           ;                           ï¿½
+	pminsw mm0, mm2             ;                           ï¿½
+	pmaxsw mm1, mm2             ;                           ï¿½
 
 	cmp byte ptr [ecx], 4
 	je short bcskip6casenoz
 
-	movzx ebx, byte ptr [ecx+5] ;                           Ý
-	movzx edi, byte ptr [ecx+6] ;                           Ý
-	movaps xmm4, _caddasm[ebx]  ;xmm4: [ z4, z4, y4, x4]    Û
-	addps xmm4, xmm7            ;                           ÛÛ±
-	movaps xmm5, _caddasm[edi]  ;xmm5: [ z5, z5, y5, x5]    Û
-	addps xmm5, xmm7            ;                           ÛÛ±
-	movaps xmm6, xmm4           ;xmm6: [ z4, z4, y4, x4]    Û
-	movhlps xmm4, xmm5          ;xmm4: [ z4, z4, z5, z5]    Û
-	movlhps xmm5, xmm6          ;xmm5: [ y4, x4, y5, x5]    Û
-	rcpps xmm4, xmm4            ;xmm6: [/z4,/z4,/z5,/z5]    ÛÛ
-	mulps xmm4, xmm5            ;xmm4: [sy4,sx4,sy5,sx5]    ÛÛ±±
+	movzx ebx, byte ptr [ecx+5] ;                           ï¿½
+	movzx edi, byte ptr [ecx+6] ;                           ï¿½
+	movaps xmm4, _caddasm[ebx]  ;xmm4: [ z4, z4, y4, x4]    ï¿½
+	addps xmm4, xmm7            ;                           ï¿½Û±
+	movaps xmm5, _caddasm[edi]  ;xmm5: [ z5, z5, y5, x5]    ï¿½
+	addps xmm5, xmm7            ;                           ï¿½Û±
+	movaps xmm6, xmm4           ;xmm6: [ z4, z4, y4, x4]    ï¿½
+	movhlps xmm4, xmm5          ;xmm4: [ z4, z4, z5, z5]    ï¿½
+	movlhps xmm5, xmm6          ;xmm5: [ y4, x4, y5, x5]    ï¿½
+	rcpps xmm4, xmm4            ;xmm6: [/z4,/z4,/z5,/z5]    ï¿½ï¿½
+	mulps xmm4, xmm5            ;xmm4: [sy4,sx4,sy5,sx5]    ï¿½Û±ï¿½
 
-	cvttps2pi mm4, xmm4         ;                           Û
-	movhlps xmm4, xmm4          ;                           Û
-	cvttps2pi mm5, xmm4         ;                           Û
-	packssdw mm4, mm5           ;                           Ý
-	pminsw mm0, mm4             ; mm0: [my1,mx1,my0,mx0]    Ý
-	pmaxsw mm1, mm4             ; mm1: [My1,Mx1,My0,Mx0]    Ý
+	cvttps2pi mm4, xmm4         ;                           ï¿½
+	movhlps xmm4, xmm4          ;                           ï¿½
+	cvttps2pi mm5, xmm4         ;                           ï¿½
+	packssdw mm4, mm5           ;                           ï¿½
+	pminsw mm0, mm4             ; mm0: [my1,mx1,my0,mx0]    ï¿½
+	pmaxsw mm1, mm4             ; mm1: [My1,Mx1,My0,Mx0]    ï¿½
 bcskip6casenoz:
 
-	pshufw mm2, mm0, 0eh        ; mm2: [   ,   ,my1,mx1]    Û
-	pshufw mm3, mm1, 0eh        ; mm3: [   ,   ,My1,Mx1]    Û
-	pminsw mm0, mm2             ; mm0: [  ?,  ?, my, mx]    Ý
-	pmaxsw mm1, mm3             ; mm1: [  ?,  ?, My, Mx]    Ý
-	punpckldq mm0, mm1          ; mm0: [ My, Mx, my, mx]    Ý
+	pshufw mm2, mm0, 0eh        ; mm2: [   ,   ,my1,mx1]    ï¿½
+	pshufw mm3, mm1, 0eh        ; mm3: [   ,   ,My1,Mx1]    ï¿½
+	pminsw mm0, mm2             ; mm0: [  ?,  ?, my, mx]    ï¿½
+	pmaxsw mm1, mm3             ; mm1: [  ?,  ?, My, Mx]    ï¿½
+	punpckldq mm0, mm1          ; mm0: [ My, Mx, my, mx]    ï¿½
 
 		;See SCRCLP2D.BAS for a derivation of these 4 lines:
-	paddsw mm0, mm6 ;_qsum0     ; mm0: ["+?,"+?,"+?,"+?]    Û
-	pmaxsw mm0, mm7 ;_qsum1     ; mm0: [sy1,sx1,sy0,sx0]    Û
-	pshufw mm1, mm0, 0eeh       ; mm1: [sy1,sx1,sy1,sx1]    Û
-	psubusw mm1, mm0            ; mm1: [  0,  0, dy, dx]    Ý
+	paddsw mm0, mm6 ;_qsum0     ; mm0: ["+?,"+?,"+?,"+?]    ï¿½
+	pmaxsw mm0, mm7 ;_qsum1     ; mm0: [sy1,sx1,sy0,sx0]    ï¿½
+	pshufw mm1, mm0, 0eeh       ; mm1: [sy1,sx1,sy1,sx1]    ï¿½
+	psubusw mm1, mm0            ; mm1: [  0,  0, dy, dx]    ï¿½
 		;kv6frameplace -= ((32767-yres)*bpl + (32767-xres)*4);
 
-	movd edx, mm1               ; edx: [ dy, dx]            Û
-	pmaddwd mm0, _qbplbpp       ; mm0: [      ?,   offs]    Û±± (=y*bpl+x*bpp)
-	movd ebx, mm1               ; ebx: [ dy, dx]            Ý
-	and edx, 0ffffh             ; ebx: [  0, dx]            Ý
-	jz short retboundcubenoz    ;                           Ý
-	sub ebx, 65536              ;                           Ý
-	jc short retboundcubenoz    ;                           Ý
+	movd edx, mm1               ; edx: [ dy, dx]            ï¿½
+	pmaddwd mm0, _qbplbpp       ; mm0: [      ?,   offs]    Û±ï¿½ (=y*bpl+x*bpp)
+	movd ebx, mm1               ; ebx: [ dy, dx]            ï¿½
+	and edx, 0ffffh             ; ebx: [  0, dx]            ï¿½
+	jz short retboundcubenoz    ;                           ï¿½
+	sub ebx, 65536              ;                           ï¿½
+	jc short retboundcubenoz    ;                           ï¿½
 
 	movzx edi, byte ptr [eax+7]
 	punpcklbw mm5, [eax]
@@ -1070,10 +1061,9 @@ bcskip6casenoz:
 	packuswb mm5, mm5
 	movd edi, mm0               ; edi: offs
 
-	lea edi, [edi+edx*4+88888888h] ;_kv6frameplace
-bcmod0noz:
+	lea edi, [edi+edx*4]
+	add edi, dword ptr _kv6frameplace
 	neg edx
-bcmod1noz:
 boundcubenoznextline:
 	mov ecx, edx
 begstosbnoz:
@@ -1081,9 +1071,7 @@ begstosbnoz:
 skipdrawpixnoz:
 	inc ecx
 	jnz begstosbnoz
-bcmod2noz:
-	add edi, 88888888h ;_kv6bytesperline
-bcmod3noz:
+	add edi, dword ptr _kv6bytesperline
 
 	sub ebx, 65536
 	jnc short boundcubenoznextline
