@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <xmmintrin.h>  /* SSE intrinsics — load/store/add/mul/... _ps */
 #define VOXLAP5
 #include "voxlap5.h"
 
@@ -9371,96 +9372,61 @@ endlig:  pshufw mm0, mm0, 0x55    ;mm0: 00 II 00 II 00 II 00 II
 	}
 }
 
-#ifdef _MSC_VER
+/* Point4d SSE helpers. Each wraps the 1-2 instruction sequence the
+ * original MSVC asm produced; MSVC and GCC/Clang all emit the same
+ * movaps/addps/etc. on x86/x86-64 targets. `point4d *` arguments must
+ * be 16-byte aligned (same requirement as the original `movaps` — the
+ * v5.asm-backed ztab4 storage and the few stack locals providing these
+ * pointers all satisfy that). */
 
 static _inline void movps (point4d *dest, point4d *src)
 {
-	_asm
-	{
-		mov eax, src
-		movaps xmm7, [eax]
-		mov eax, dest
-		movaps [eax], xmm7
-	}
+	_mm_store_ps((float *)dest, _mm_load_ps((const float *)src));
 }
 
 static _inline void intss (point4d *dest, int32_t src)
 {
-	_asm
-	{
-		mov eax, dest
-		cvtsi2ss xmm7, src
-		shufps xmm7, xmm7, 0
-		movaps [eax], xmm7
-	}
+	/* cvtsi2ss writes lane 0 from int, leaves 1..3 of `base` alone;
+	 * shufps,0 then broadcasts lane 0 to all four. Passing a zero
+	 * base keeps the initial state deterministic. */
+	__m128 v = _mm_cvt_si2ss(_mm_setzero_ps(), src);
+	_mm_store_ps((float *)dest, _mm_shuffle_ps(v, v, 0));
 }
 
 static _inline void addps (point4d *sum, point4d *a, point4d *b)
 {
-	_asm
-	{
-		mov eax, a
-		movaps xmm7, [eax]
-		mov eax, b
-		addps xmm7, [eax]
-		mov eax, sum
-		movaps [eax], xmm7
-	}
+	_mm_store_ps((float *)sum,
+	             _mm_add_ps(_mm_load_ps((const float *)a),
+	                        _mm_load_ps((const float *)b)));
 }
 
 static _inline void mulps (point4d *sum, point4d *a, point4d *b)
 {
-	_asm
-	{
-		mov eax, a
-		movaps xmm7, [eax]
-		mov eax, b
-		mulps xmm7, [eax]
-		mov eax, sum
-		movaps [eax], xmm7
-	}
+	_mm_store_ps((float *)sum,
+	             _mm_mul_ps(_mm_load_ps((const float *)a),
+	                        _mm_load_ps((const float *)b)));
 }
 
 static _inline void subps (point4d *sum, point4d *a, point4d *b)
 {
-	_asm
-	{
-		mov eax, a
-		movaps xmm7, [eax]
-		mov eax, b
-		subps xmm7, [eax]
-		mov eax, sum
-		movaps [eax], xmm7
-	}
+	_mm_store_ps((float *)sum,
+	             _mm_sub_ps(_mm_load_ps((const float *)a),
+	                        _mm_load_ps((const float *)b)));
 }
 
 static _inline void minps (point4d *sum, point4d *a, point4d *b)
 {
-	_asm
-	{
-		mov eax, a
-		movaps xmm7, [eax]
-		mov eax, b
-		minps xmm7, [eax]
-		mov eax, sum
-		movaps [eax], xmm7
-	}
+	_mm_store_ps((float *)sum,
+	             _mm_min_ps(_mm_load_ps((const float *)a),
+	                        _mm_load_ps((const float *)b)));
 }
 
 static _inline void maxps (point4d *sum, point4d *a, point4d *b)
 {
-	_asm
-	{
-		mov eax, a
-		movaps xmm7, [eax]
-		mov eax, b
-		maxps xmm7, [eax]
-		mov eax, sum
-		movaps [eax], xmm7
-	}
+	_mm_store_ps((float *)sum,
+	             _mm_max_ps(_mm_load_ps((const float *)a),
+	                        _mm_load_ps((const float *)b)));
 }
-
-#endif
 
 #define DRAWBOUNDCUBELINE(const) \
 	for(;v0<=v1 && v0->z<inz;v0++) drawboundcubesse(v0,const+0x20);\
