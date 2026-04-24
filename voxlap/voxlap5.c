@@ -13016,9 +13016,21 @@ intoslabloop:
 			/* Advance into the new top slot. Register mm1 (cx1/cy1
 			 * locals) still holds the search-end value, which is what
 			 * drawfwall wants for its subsequent right-edge walk. Other
-			 * locals already match c[1]'s memory (via the shift-copy). */
+			 * locals already match c[1]'s memory (via the shift-copy).
+			 *
+			 * Asm `mov edx, eax` (v5.asm:540) sets z1 = next_v3 right
+			 * before `jmp drawfwall`. That's NOT c[1].z1 semantically —
+			 * c[1].z1 stays at the original z1 via the shift-copy — but
+			 * it's what the register carries into drawfwall, and the
+			 * loop0 iteration count there is derived from it. If we
+			 * leave z1 at its stale pre-split value the front-wall fill
+			 * iterates the wrong number of times and reads voxel colour
+			 * bytes past the slab's visible range, which shows up as
+			 * speckled garbage above tall voxel structures (e.g. the
+			 * ball in the oracle's sprite_iso / diag_down scenes). */
 			c++;
 			z0 = c->z0;   /* = ORIGINAL z0, unchanged */
+			z1 = next_v3;
 			goto drawfwall;
 		}
 		goto findslabloop;
