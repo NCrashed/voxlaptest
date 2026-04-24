@@ -12983,8 +12983,83 @@ deletez:
 	goto afterdelete;
 
 remiporend:
-	/* 4.5b.5 — mip-level transition. Stub → retsub (renders as
-	 * "everything past this gx just stops"). */
+	/* 4.5b.5b — full mip-level transition (halving gdz/gixy, re-masking
+	 * voxel pointer via gxmipk/gymipk/gamipk, halving cfasm z values)
+	 * is deferred. For now drop straight to startsky: scenes with
+	 * multi-mip columns render the first-mip pixels correctly plus
+	 * sky fill past ngxmax, losing the mip-2+ detail at the horizon. */
+	goto startsky;
+
+startsky:
+	/* Fill every remaining cfasm entry's pixel range with sky. Two
+	 * branches: solid-fill using skycast when no sky texture is
+	 * loaded, or latitude-indexed texture lookup using skylat + skyoff
+	 * when one is. */
+	c = &cf[128];
+	if (c > ce) goto retsub;  /* stack already empty */
+
+	if (skyoff == 0) {
+		/* --- Sky texture not loaded: fill with skycast ---
+		 * Asm writes mm5 = _skycast via movntq 8 bytes = [col | dist].
+		 * castdat struct mirrors that layout so plain assignment works. */
+		for (; c <= ce; c++) {
+			castdat *p = c->i0;
+			castdat *end = c->i1;
+			while (p <= end) {
+				*p = skycast;
+				p++;
+			}
+		}
+		goto retsub;
+	}
+
+	/* --- Sky texture loaded: pick texels by latitude search ---
+	 * Asm prestartskyloop / startskyloop / preskysearch / skysearch.
+	 * For each cfasm entry, walk its pixels right-to-left; per pixel,
+	 * step the ray (cx1, cy1) backward by _gi and search the skylat
+	 * table for the edi index where cy1*xvi - cx1*yvi first becomes
+	 * non-negative. skylat[edi] packs (xvi, -yvi) as two int16s in an
+	 * int32 (per the asm's `mm3: [... xvi -yvi]` comment). */
+	{
+		int32_t sky_edi = skyxsiz;          /* edi, latitude pointer — preserved across c entries */
+		int32_t skydist = skycast.dist;     /* mm5 in the asm (skycast's high 32 bits) */
+		const int32_t *sky_lat_table = skylat;
+		const int32_t *sky_tex = (const int32_t *)(intptr_t)skyoff;
+
+		for (; c <= ce; c++) {
+			castdat *p_start = c->i0;
+			castdat *p = c->i1;
+			if (p_start > p) continue;
+
+			int32_t cx1_sk = c->cx1, cy1_sk = c->cy1;
+			for (;;) {
+				/* preskysearch: step ray backward. */
+				cx1_sk -= gi0;
+				cy1_sk -= gi1;
+
+				/* skysearch: find matching sky column. */
+				for (;;) {
+					int32_t sl = sky_lat_table[sky_edi];
+					int32_t neg_yvi  = (int32_t)(int16_t)(sl & 0xFFFF);  /* low 16 */
+					int32_t xvi_lane = (int32_t)(int16_t)(sl >> 16);     /* high 16 */
+					/* pmaddwd equivalent: (cx_hi16 * neg_yvi) + (cy_hi16 * xvi) */
+					int32_t test = (cx1_sk >> 16) * neg_yvi
+					             + (cy1_sk >> 16) * xvi_lane;
+					/* Asm: `sar edx, 31; lea edi, [edi+edx]; jnz skysearch`
+					 * — sign >= 0 stops the loop, sign < 0 decrements edi. */
+					if (test >= 0) break;
+					sky_edi--;
+				}
+
+				p->col = sky_tex[sky_edi];
+#if (USEZBUFFER == 1)
+				p->dist = skydist;
+#endif
+				if (p <= p_start) break;
+				p--;
+			}
+		}
+	}
 	goto retsub;
 
 retsub:
