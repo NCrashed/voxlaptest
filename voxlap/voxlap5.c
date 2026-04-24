@@ -12511,6 +12511,33 @@ void uninitvoxlap ()
 
 #ifdef VOXLAP_SCALAR_GROUSCAN
 
+#ifdef VOXLAP_SCALAR_GROUSCAN_DEBUG
+/* Debug harness for 4.5b.6g. Filters to slabs with v[1] == 178 (the
+ * yellow sphere's top z in the oracle's diag_down/sprite_iso scenes),
+ * caps at the first ~30 events so CI output stays manageable. Enable
+ * with -DVOXLAP_SCALAR_GROUSCAN_DEBUG=ON (see CMakeLists). Output goes
+ * to stderr — a matching sed/grep filter in the CI step can extract it
+ * from the oracle artifact if stdout redirection gets in the way. */
+#include <stdio.h>
+#define GROUSCAN_DBG_CAP 30
+static int32_t groudbg_count = 0;
+static int32_t groudbg_enabled (const unsigned char *v) {
+	if (groudbg_count >= GROUSCAN_DBG_CAP) return 0;
+	return (v[1] == 178 && v[0] != 0);
+}
+#define GROUSCAN_DBG(vptr, fmt, ...) \
+	do { \
+		if (groudbg_enabled(vptr)) { \
+			fprintf(stderr, "grouscan-dbg[%d] " fmt "\n", \
+			        groudbg_count, __VA_ARGS__); \
+		} \
+	} while (0)
+#define GROUSCAN_DBG_TICK() do { if (groudbg_count < GROUSCAN_DBG_CAP) groudbg_count++; } while (0)
+#else
+#define GROUSCAN_DBG(vptr, fmt, ...) ((void)0)
+#define GROUSCAN_DBG_TICK() ((void)0)
+#endif
+
 /* --- Color pipeline helper ---
  *
  * Replicates the asm sequence:
@@ -12962,6 +12989,13 @@ intoslabloop:
 			/* Asm `jle drawfwall` — single-slab case, no split. */
 			if (test_next <= 0) goto drawfwall;
 
+			GROUSCAN_DBG(v, "split-enter v[1]=%d v[2]=%d v[3]=%d v0=%d next_v3=%d "
+			                "z0=%d z1=%d ogx=%08x gx=%08x lane=%d "
+			                "cx0=%08x cy0=%08x cx1=%08x cy1=%08x gy_raw=%08x test_next=%d",
+			             (int)v[1], (int)v[2], (int)v[3], (int)v0, (int)next_v3,
+			             z0, z1, ogx, gx, lane,
+			             cx0, cy0, cx1, cy1, gy_raw, test_next);
+
 			/* === Two-slab split ============================================
 			 * Find the split column `col` within [c->i0, c->i1] where the
 			 * ray transitions from intersecting slab-N to slab-N+1. Insert
@@ -12982,12 +13016,18 @@ intoslabloop:
 			gy_raw = gylookoff[v2 + 1];
 
 			castdat *col = c->i1;
+			int32_t search_steps = 0;
 			for (;;) {
 				int32_t t = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
 				if (t <= 0) break;
 				cx1 -= gi0; cy1 -= gi1;
 				col--;
+				search_steps++;
 			}
+			GROUSCAN_DBG(v, "split-search steps=%d col_delta=%ld cx1_post=%08x cy1_post=%08x",
+			             search_steps,
+			             (long)((const castdat *)col - (const castdat *)c->i0),
+			             cx1, cy1);
 
 			/* Push new entry. cf[] has 256 slots; asm caps at cf[191]
 			 * (64 active entries) via `cmp eax, offset _cfasm[4096]`. */
@@ -13039,6 +13079,12 @@ intoslabloop:
 			c++;
 			z0 = c->z0;   /* = ORIGINAL z0, unchanged */
 			z1 = next_v3;
+			GROUSCAN_DBG(v, "split-exit c[1].i0=%p c[1].i1=%p c[1].z0=%d c[1].z1=%d "
+			                "c[0].i0=%p c[0].i1=%p c[0].z0=%d c[0].z1=%d -> drawfwall",
+			             (void *)c->i0, (void *)c->i1, c->z0, c->z1,
+			             (void *)(c - 1)->i0, (void *)(c - 1)->i1,
+			             (c - 1)->z0, (c - 1)->z1);
+			GROUSCAN_DBG_TICK();
 			goto drawfwall;
 		}
 		goto findslabloop;

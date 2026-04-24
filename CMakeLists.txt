@@ -79,6 +79,16 @@ if(VOXLAP_SCALAR_GROUSCAN)
     target_compile_definitions(voxlap PRIVATE VOXLAP_SCALAR_GROUSCAN)
 endif()
 
+# Stage 4.5b.6g shakedown diagnostic: when ON, grouscanasm_scalar emits
+# per-event stderr traces gated on the yellow-sphere's top-z slab
+# signature (v[1]==178 && v[0]!=0) to help pin down the dark-column
+# artifact above the voxel sphere. Implies VOXLAP_SCALAR_GROUSCAN. No
+# effect in normal builds.
+option(VOXLAP_SCALAR_GROUSCAN_DEBUG "Emit scalar grouscan diagnostic traces" OFF)
+if(VOXLAP_SCALAR_GROUSCAN_DEBUG)
+    target_compile_definitions(voxlap PRIVATE VOXLAP_SCALAR_GROUSCAN VOXLAP_SCALAR_GROUSCAN_DEBUG)
+endif()
+
 # Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to
 # __declspec(dllexport) when building voxlap (CMake auto-defines
 # voxlap_EXPORTS for SHARED targets), __declspec(dllimport) in consumers,
