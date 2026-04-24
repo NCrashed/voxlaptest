@@ -12510,6 +12510,88 @@ void uninitvoxlap ()
 }
 
 #ifdef VOXLAP_SCALAR_GROUSCAN
+
+/* --- Color pipeline helper ---
+ *
+ * Replicates the asm sequence:
+ *   punpcklbw mm5, [vox]  ; mm5 words[i] = mm5_tail.byte[i] + vox.byte[i]*256
+ *   psubusb   mm5, csub   ; saturated u8 subtract per byte
+ *   pshufw    mm2, mm5, 0xff  ; replicate word[3] to all lanes
+ *   pmulhuw   mm5, mm2    ; per-word unsigned multiply, keep hi-16
+ *   psrlw     mm5, 7      ; shift right 7 per word
+ *   packuswb  mm5, mm5    ; saturate-pack words to u8, duplicate
+ *
+ * Returns the packed 4-byte result and updates *tail for the next
+ * call's punpcklbw (the cross-call mm5 carry the asm relies on). */
+static inline uint32_t grouscan_shade (uint32_t vox, uint32_t *tail,
+                                        const int64_t *csub_qword)
+{
+	uint8_t b[8];
+	uint16_t w[4];
+	const uint8_t *cs = (const uint8_t *)csub_qword;
+	uint32_t t = *tail;
+	int32_t i;
+
+	/* punpcklbw mm5, vox — interleave low 4 bytes of tail and vox. */
+	b[0] = (uint8_t)(t      ); b[1] = (uint8_t)(vox      );
+	b[2] = (uint8_t)(t >>  8); b[3] = (uint8_t)(vox >>  8);
+	b[4] = (uint8_t)(t >> 16); b[5] = (uint8_t)(vox >> 16);
+	b[6] = (uint8_t)(t >> 24); b[7] = (uint8_t)(vox >> 24);
+
+	/* psubusb — saturated u8 subtract per byte against csub. */
+	for (i = 0; i < 8; i++) {
+		int32_t d = (int32_t)b[i] - (int32_t)cs[i];
+		b[i] = d < 0 ? 0 : (uint8_t)d;
+	}
+
+	/* Repack to 4 u16 words. */
+	w[0] = (uint16_t)(b[0] | (b[1] << 8));
+	w[1] = (uint16_t)(b[2] | (b[3] << 8));
+	w[2] = (uint16_t)(b[4] | (b[5] << 8));
+	w[3] = (uint16_t)(b[6] | (b[7] << 8));
+
+	/* pshufw mm5, 0xff + pmulhuw — broadcast word[3] and multiply-hi. */
+	{
+		uint16_t repl = w[3];
+		for (i = 0; i < 4; i++)
+			w[i] = (uint16_t)(((uint32_t)w[i] * repl) >> 16);
+	}
+
+	/* psrlw mm5, 7. */
+	for (i = 0; i < 4; i++) w[i] = (uint16_t)(w[i] >> 7);
+
+	/* packuswb mm5, mm5 — saturate-pack each word to u8. */
+	{
+		uint8_t p[4];
+		for (i = 0; i < 4; i++) p[i] = w[i] > 255 ? 255 : (uint8_t)w[i];
+		uint32_t color = (uint32_t)p[0]
+		                | ((uint32_t)p[1] << 8)
+		                | ((uint32_t)p[2] << 16)
+		                | ((uint32_t)p[3] << 24);
+		*tail = color;
+		return color;
+	}
+}
+
+/* --- Cross-product sign test ---
+ *
+ * The asm's `pmaddwd mm7, mm3; test eax, eax; jle/jg` is algebraically
+ * `sgn((cx * gy_low16 + cy * depth_hi16) low_int32)` but the C
+ * fallback (see voxlap5.c's dmulrethigh use at e.g. line 1238,
+ * `dmulrethigh(gylookup[z], cx, cy, depth)`) gets the same sign from
+ * the full-precision int64 form. Use that: it's mathematically
+ * equivalent for the oracle's value range and keeps us honest about
+ * what the test *means*. Hash drift vs asm for truncation-differing
+ * edge cases is acceptable — refreeze at 4.5b.6.
+ *
+ * Returns (gy * cx - cy * depth) >> 32 — same as dmulrethigh. */
+static inline int32_t grouscan_cross_sign (int32_t cx, int32_t cy,
+                                            int32_t depth, int32_t gy_raw)
+{
+	return (int32_t)(((int64_t)gy_raw * (int64_t)cx
+	                - (int64_t)cy * (int64_t)depth) >> 32);
+}
+
 /* Scalar C port of _grouscanasm (voxasm/v5.asm). See
  * voxasm/GROUSCANASM.md for the spec.
  *
@@ -12566,14 +12648,15 @@ static void grouscanasm_scalar (intptr_t vptr)
 	ngxmax = gxmax;
 	if (gmipnum > 1 && gxmip < ngxmax) ngxmax = gxmip;
 
-	/* Pick the leading raycast lane (smaller gpz wins) and seed gx
-	 * from it; ogx is the other lane's previous value (0 here since
-	 * we haven't stepped yet — becomes meaningful after the first
-	 * column advance). Asm stores both as int32 with low-16 masked
-	 * off, so we mimic that with `& 0xFFFF0000`. */
+	/* Pick the leading raycast lane (smaller gpz wins). Asm's mm6 after
+	 * prologue = [ogx_slot (= gpz[lane] masked), gx_slot (= 0)] as two
+	 * int32 lanes — i.e. the first column's depth goes into the ogx
+	 * position, gx stays 0 until the first column advance fills it.
+	 * Asm stores both with low-16 masked off to leave only the
+	 * fixed-point integer part (`& 0xFFFF0000`). */
 	lane = (gpz[1] < gpz[0]) ? 1 : 0;
-	gx   = gpz[lane] & (int32_t)0xFFFF0000u;
-	ogx  = 0;
+	ogx  = gpz[lane] & (int32_t)0xFFFF0000u;
+	gx   = 0;
 	gpz[lane] += gdz[lane];
 
 	/* esi in asm points at gpixy which dereferences the sptr entry
@@ -12585,20 +12668,110 @@ static void grouscanasm_scalar (intptr_t vptr)
 	if (v == *ixy_sptr_col) goto drawflor;
 	goto drawceil;
 
+	/* A shared pixel-colour carry across all draw phases, matching the
+	 * asm's mm5 register state which persists across punpcklbw calls. */
+	uint32_t mm5_tail = 0;
+	castdat *ebx;
+	uint32_t color;
+	int32_t gy_raw;
+	int32_t off;
+
 drawfwall:
-	/* 4.5b.3 — front wall fill. For now: return. */
-	goto retsub;
+	/* Front wall: fill pixels going left (decrementing ebx from c->i1). */
+	{
+		int32_t dv1 = (int32_t)v[1];
+		if (dv1 >= z1) goto drawcwall;
+		ebx = c->i1;
+	}
+loop0:
+	{
+		off = z1 - (int32_t)v[1];  /* OLD z1 - v[1] */
+		z1--;
+		/* Load voxel colour dword at byte offset off*4 into slab. */
+		uint32_t vox = *(const uint32_t *)(v + off * 4);
+		color = grouscan_shade(vox, &mm5_tail, &gcsub[lane]);
+		gy_raw = gylookoff[z1];  /* NEW z1 */
+	}
+loop1:
+	{
+		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
+		if (test <= 0) goto endloop1;
+		/* psubd mm1, _gi — advance right-edge ray left */
+		cx1 -= gi0; cy1 -= gi1;
+		/* Store pixel + depth. */
+		ebx->col = (int32_t)color;
+#if (USEZBUFFER == 1)
+		ebx->dist = ogx;
+#endif
+		ebx--;
+		if (ebx >= c->i0) goto loop1;
+		goto predeletez;
+	}
+endloop1:
+	if ((int32_t)v[1] != z1) goto loop0;
+	c->i1 = ebx;
+	/* fall through to drawcwall */
 
 drawcwall:
-	/* 4.5b.3 — back wall fill. Falls through from drawfwall. */
+	/* Back wall: fill pixels going right (incrementing ebx from c->i0). */
+	{
+		if (v == *ixy_sptr_col) {
+			/* Column-top: no back wall to draw, handle floor. */
+			z1 = (int32_t)v[1];
+			goto predrawflor;
+		}
+		int32_t dv3 = (int32_t)v[3];
+		if (dv3 <= z0) {
+			z0 = dv3;
+			goto predrawceil;
+		}
+		ebx = c->i0;
+	}
+loop2:
+	{
+		off = z0 - (int32_t)v[3];
+		z0++;
+		uint32_t vox = *(const uint32_t *)(v + off * 4);
+		color = grouscan_shade(vox, &mm5_tail, &gcsub[lane]);
+		gy_raw = gylookoff[z0];
+	}
+loop3:
+	{
+		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
+		if (test > 0) goto endloop3;
+		cx0 += gi0; cy0 += gi1;
+		ebx->col = (int32_t)color;
+#if (USEZBUFFER == 1)
+		ebx->dist = ogx;
+#endif
+		ebx++;
+		if (ebx <= c->i1) goto loop3;
+		goto predeletez;
+	}
+endloop3:
+	if ((int32_t)v[3] != z0) goto loop2;
+	c->i0 = ebx;
+	z0 = (int32_t)v[3];
+	/* fall through to predrawceil */
+
+predrawceil:
+	/* 4.5b.3b — ceiling fill. */
 	goto retsub;
 
 drawceil:
-	/* 4.5b.3 — ceiling fill. */
+	/* 4.5b.3b — ceiling fill entry. */
+	goto retsub;
+
+predrawflor:
+	/* 4.5b.3b — floor fill. */
 	goto retsub;
 
 drawflor:
-	/* 4.5b.3 — floor fill. */
+	/* 4.5b.3b — floor fill entry. */
+	goto retsub;
+
+predeletez:
+	/* 4.5b.4 — entry-point variant of deletez that swaps mm6 halves. */
 	goto retsub;
 
 retsub:
