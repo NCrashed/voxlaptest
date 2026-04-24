@@ -9114,6 +9114,14 @@ char ptfaces16[43][8] =
 
 #include <mmintrin.h>  /* MMX intrinsics — for drawboundcubesse port */
 
+	/* Match v5.asm's MAXZSIZ constant — size of the ztab4 (ztabasm)
+	 * depth-lookup arena. kv6draw's #define MAXZSIZ 1024 lives below
+	 * this function; duplicated here so the forward-declared
+	 * drawboundcubesse body can reference it. */
+#ifndef MAXZSIZ
+#define MAXZSIZ 1024
+#endif
+
 /* drawboundcubesse — voxel sprite rasterizer. Ported from v5.asm in
  * Stage 4.4c. Renders one kv6 voxel into the framebuffer as a screen-
  * aligned rectangle with z-buffer test.
