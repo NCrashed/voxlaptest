@@ -12759,9 +12759,19 @@ endloop1:
 drawcwall:
 	/* Back wall: fill pixels going right (incrementing ebx from c->i0). */
 	{
+		/* Asm sets z1 = v[1] UNCONDITIONALLY at drawcwall entry
+		 * (`mov edx, eax` at v5.asm:266, where eax = v[1] from
+		 * drawfwall's loop0/endloop1 setup). When drawfwall takes the
+		 * early-exit `jge drawcwall` path with v[1] >= z1, edx hasn't
+		 * been touched yet, so z1 is stale vs v[1]. A later
+		 * predrawceil→drawceil→jg drawflor would then index
+		 * gylookoff[z1_stale] instead of gylookoff[v[1]] and the
+		 * cross-product test flips — drawflor exits immediately, the
+		 * cfasm entry's pixel range is popped unfilled, and the missing
+		 * columns show through as sky. */
+		z1 = (int32_t)v[1];
 		if (v == *ixy_sptr_col) {
 			/* Column-top: no back wall to draw, handle floor. */
-			z1 = (int32_t)v[1];
 			goto predrawflor;
 		}
 		int32_t dv3 = (int32_t)v[3];
