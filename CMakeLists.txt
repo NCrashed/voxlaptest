@@ -68,6 +68,17 @@ target_compile_definitions(voxlap PRIVATE
     _USRDLL
 )
 
+# Stage 4.5b dev toggle: build voxlap using the scalar C port of
+# grouscanasm (voxlap/voxlap5.c) instead of the MMX asm entry point
+# in voxasm/v5.asm. OFF by default — the scalar port is incomplete
+# and rendering with it set ON will be visibly wrong until 4.5b
+# lands its final chunks. Enable with -DVOXLAP_SCALAR_GROUSCAN=ON to
+# diff scalar output against the asm goldens as the port progresses.
+option(VOXLAP_SCALAR_GROUSCAN "Use the scalar C port of grouscanasm" OFF)
+if(VOXLAP_SCALAR_GROUSCAN)
+    target_compile_definitions(voxlap PRIVATE VOXLAP_SCALAR_GROUSCAN)
+endif()
+
 # Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to
 # __declspec(dllexport) when building voxlap (CMake auto-defines
 # voxlap_EXPORTS for SHARED targets), __declspec(dllimport) in consumers,

@@ -216,6 +216,13 @@ static int32_t gmaxscandist;
 //int32_t reax, rebx, recx, redx, resi, redi, rebp, resp, remm[16];
 void v5_asm_dep_unlock();
 void grouscanasm (int32_t);
+#ifdef VOXLAP_SCALAR_GROUSCAN
+/* Stage 4.5b: scalar C port of grouscanasm. Toggled at CMake time via
+ * -DVOXLAP_SCALAR_GROUSCAN=ON. Defined further down the file once all
+ * its static helpers and the cfentry data model are in scope. See
+ * voxasm/GROUSCANASM.md for the algorithm spec this implements. */
+static void grouscanasm_scalar (intptr_t vptr);
+#endif
 #if (USEZBUFFER == 1)
 int32_t zbufoff;
 #endif
@@ -1188,7 +1195,11 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 	}
 
 	//resp = 0;
+#ifdef VOXLAP_SCALAR_GROUSCAN
+	grouscanasm_scalar((intptr_t)gstartv);
+#else
 	grouscanasm((intptr_t)gstartv);
+#endif
 	//if (resp)
 	//{
 	//   static char tempbuf[2048], tempbuf2[256];
@@ -12497,6 +12508,32 @@ void uninitvoxlap ()
 #endif
 	if (radarmem) { free(radarmem); radarmem = 0; radar = 0; }
 }
+
+#ifdef VOXLAP_SCALAR_GROUSCAN
+/* Scalar C port of _grouscanasm (voxasm/v5.asm, lines 172-722).
+ * Specification: voxasm/GROUSCANASM.md.
+ *
+ * Stage 4.5b infrastructure only: this is a no-op stub. Enabling the
+ * CMake flag right now renders black scanlines for every column — the
+ * goal of this commit is just to land the scaffolding (call-site
+ * dispatch, CMake toggle, function signature) so subsequent commits
+ * can fill in the body label-group by label-group without touching
+ * the build system again.
+ *
+ * Body will come in sub-commits:
+ *   4.5b.2 — prologue + cfasm pseudo-stack data model + drawflor/ceil
+ *            dispatch on entry.
+ *   4.5b.3 — wall / ceiling / floor fill loops.
+ *   4.5b.4 — findslabloop, split-on-next-intersecting-slab, deletez.
+ *   4.5b.5 — remiporend (mip transition) + startsky (sky fill).
+ *   4.5b.6 — flip CMake default to ON, refreeze goldens if needed,
+ *            delete the asm and enter 4.6. */
+static void grouscanasm_scalar (intptr_t vptr)
+{
+	(void)vptr;
+	/* TODO: 4.5b.2+ — see voxasm/GROUSCANASM.md */
+}
+#endif
 
 int32_t initvoxlap ()
 {
