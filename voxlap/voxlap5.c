@@ -12812,9 +12812,153 @@ drawflorloop:
 	}
 
 enddrawflor:
-	/* 4.5b.4 — afterdelete: pop cfasm entry, step column, find next
-	 * slab. Stubbed for now → retsub ends the scanline. */
-	goto retsub;
+	/* fall through to afterdelete */
+
+afterdelete:
+	/* Pop current c entry. If still in active cfasm region, handle
+	 * next entry in the same column (skipixy). Otherwise step to the
+	 * next voxel column (ixy_sptr_col advances via gixy[lane]). */
+	{
+		cftype *c_presync = c;
+		c--;
+		if (c >= &cf[128]) goto skipixy_with_presync;
+
+		/* Column step. */
+		ixy_sptr_col = (const unsigned char *const *)(
+			(const unsigned char *)ixy_sptr_col + gixy[lane]);
+		v = *ixy_sptr_col;
+		lane = (gpz[1] < gpz[0]) ? 1 : 0;
+		{
+			int32_t new_gpz = gpz[lane];
+			/* Asm's punpckldq mm6, mm7 + pand mmask: mm6.int32[1] =
+			 * new_gpz_masked; int32[0] stays (holds post-swap ogx). */
+			gx = new_gpz & (int32_t)0xFFFF0000u;
+			/* Asm uses `ja` (unsigned >). gpz values usually stay in
+			 * [0, INT32_MAX] but may wrap negative on overflow; the
+			 * unsigned compare catches that and triggers the mip
+			 * transition which clamps. */
+			if ((uint32_t)new_gpz > (uint32_t)ngxmax) goto remiporend;
+			gpz[lane] += gdz[lane];
+		}
+		c = ce;
+		/* NB: c_presync may or may not equal new c (=ce) here. The
+		 * sync at skipixy2 handles both. */
+		if (c_presync == c) goto skipixy3;
+		goto skipixy2_sync_from_presync;
+
+	skipixy_with_presync:
+		/* Same column — swap mm6 halves back (undoing predeletez's
+		 * swap) and proceed to skipixy2. */
+		{ int32_t tmp = ogx; ogx = gx; gx = tmp; }
+		/* c_presync is c+1 here. Always a different slot → always sync. */
+		goto skipixy2_sync_from_presync;
+
+	skipixy2_sync_from_presync:
+		/* Write current register state to the pre-pop c_presync slot
+		 * so it's preserved if we come back to it later. Then load
+		 * state from the new current c. */
+		c_presync->z0 = z0; c_presync->z1 = z1;
+		c_presync->cx0 = cx0; c_presync->cy0 = cy0;
+		c_presync->cx1 = cx1; c_presync->cy1 = cy1;
+		z0 = c->z0; z1 = c->z1;
+		cx0 = c->cx0; cy0 = c->cy0;
+		cx1 = c->cx1; cy1 = c->cy1;
+	}
+	/* fall through to skipixy3 */
+
+skipixy3:
+	/* Find the highest voxel slab that intersects this column's ray
+	 * right-edge frustum. `v` points at the current slab header;
+	 * v[0] is the dword-offset to the next slab (0 = end of column). */
+	if (v[0] == 0) goto drawfwall;
+	goto intoslabloop;
+
+findslabloop:
+	v += (size_t)v[0] * 4;
+	if (v[0] == 0) goto drawfwall;
+intoslabloop:
+	{
+		int32_t v2 = (int32_t)v[2];
+		gy_raw = gylookoff[v2 + 1];
+		int32_t test_hi = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
+		int32_t v0 = (int32_t)v[0];
+		/* Asm: `jg findslabloop` — test > 0 means slab is still above
+		 * the ray, skip to next. Using dmulrethigh-equivalent → the
+		 * C fallback at voxlap5.c:1293 uses `>= 0` to BREAK. Equivalent
+		 * via inverted condition. */
+		if (test_hi >= 0) {
+			/* Slab intersects. Check if NEXT slab ALSO intersects
+			 * (if so, split the cfasm entry). */
+			int32_t next_v3 = (int32_t)v[v0 * 4 + 3];
+			gy_raw = gylookoff[next_v3];
+			int32_t test_next = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
+			if (test_next >= 0) goto drawfwall;  /* single-slab, just draw */
+
+			/* === Two-slab split ============================================
+			 * Find the split column `col` within [c->i0, c->i1] where the
+			 * ray transitions from intersecting slab-N to slab-N+1. Insert
+			 * a new cfasm entry at c+1 covering the BEFORE-split range;
+			 * narrow the current c to the AFTER-split range; advance c
+			 * into the new entry; goto drawfwall.
+			 *
+			 * Asm's prebegsearchi16 does 16-step batches for speed; the
+			 * single-step search here is simpler and covers the same
+			 * sign-transition. */
+			c->z0 = z0; c->z1 = z1;
+			c->cx0 = cx0; c->cy0 = cy0;
+			c->cx1 = cx1; c->cy1 = cy1;
+
+			/* mm3 for the search = gylookoff[v[2]+1] (same gy_raw as
+			 * first test). Reset gy_raw in case it was overwritten by
+			 * the next-slab test. */
+			gy_raw = gylookoff[v2 + 1];
+
+			castdat *col = c->i1;
+			for (;;) {
+				int32_t t = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
+				if (t <= 0) break;
+				cx1 -= gi0; cy1 -= gi1;
+				col--;
+			}
+
+			/* Push new entry. cf[] has 256 slots; asm caps at cf[191]
+			 * (64 active entries) via `cmp eax, offset _cfasm[4096]`. */
+			if (ce >= &cf[191]) goto retsub;
+			ce++;
+
+			/* Shift entries in (c, ce] up by one slot so c+1 becomes
+			 * a duplicate of c. */
+			{
+				cftype *p;
+				for (p = ce; p > c + 1; p--) *p = *(p - 1);
+			}
+
+			/* Now c[1] is a clone of c. Overwrite the fields that the
+			 * split changes:
+			 *   c[1].i1 = col              (narrowed right edge)
+			 *   c[0].i0 = col+1            (narrowed left edge, past split)
+			 *   c[0].z0 = next_v3          (top z of next slab)
+			 *   c[0].cx0/cy0 = cx1+gi      (split-point ray)
+			 *
+			 * c[0]'s z1, cx1/cy1, i1 remain at original values (via
+			 * sync above for z1/cx1-but-now-search-end/cy1; cx1/cy1
+			 * memory still holds ORIGINAL from the sync before search). */
+			c[1].i1 = col;
+			c->i0 = col + 1;
+			c->z0 = next_v3;
+			c->cx0 = cx1 + gi0;
+			c->cy0 = cy1 + gi1;
+
+			/* Advance into the new top slot. Register mm1 (cx1/cy1
+			 * locals) still holds the search-end value, which is what
+			 * drawfwall wants for its subsequent right-edge walk. Other
+			 * locals already match c[1]'s memory (via the shift-copy). */
+			c++;
+			z0 = c->z0;   /* = ORIGINAL z0, unchanged */
+			goto drawfwall;
+		}
+		goto findslabloop;
+	}
 
 predeletez:
 	/* predeletez swaps mm6 halves before falling into deletez. */
@@ -12822,8 +12966,25 @@ predeletez:
 	/* fall through */
 
 deletez:
-	/* 4.5b.4 — remove current cfasm entry, shift rest down, re-enter
-	 * afterdelete. Stubbed → retsub. */
+	/* Pop the top of the cfasm stack (ce--). If c was below ce (we
+	 * entered deletez while processing an interior entry), shift
+	 * entries at (c, old_ce] down by one slot so the popped slot gap
+	 * is closed. Otherwise (c == ce), no shift needed. Falls into
+	 * afterdelete to pop c itself. */
+	{
+		if (ce <= &cf[128]) goto retsub;
+		cftype *old_ce = ce;
+		ce--;
+		if (c < old_ce) {
+			cftype *p;
+			for (p = c; p < old_ce; p++) *p = *(p + 1);
+		}
+	}
+	goto afterdelete;
+
+remiporend:
+	/* 4.5b.5 — mip-level transition. Stub → retsub (renders as
+	 * "everything past this gx just stops"). */
 	goto retsub;
 
 retsub:
