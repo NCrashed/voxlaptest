@@ -12613,23 +12613,36 @@ static const int32_t grouscan_gylut_offsets[10] = {
 	4*9 + 512 + 256 + 128 + 64 + 32 + 16 + 8 + 4 + 2
 };
 
-/* --- Cross-product sign test ---
+/* --- Cross-product sign test — literal pmaddwd port ---
  *
- * The asm's `pmaddwd mm7, mm3; test eax, eax; jle/jg` is algebraically
- * `sgn((cx * gy_low16 + cy * depth_hi16) low_int32)` but the C
- * fallback (see voxlap5.c's dmulrethigh use at e.g. line 1238,
- * `dmulrethigh(gylookup[z], cx, cy, depth)`) gets the same sign from
- * the full-precision int64 form. Use that: it's mathematically
- * equivalent for the oracle's value range and keeps us honest about
- * what the test *means*. Hash drift vs asm for truncation-differing
- * edge cases is acceptable — refreeze at 4.5b.6.
+ * The asm's sequence
+ *   movd  mm3, [gylookoff+z*4]   ; mm3.int16[0] = gy_low16
+ *   por   mm3, mm6               ; mm3.int16[1] = depth>>16 (ogx or gx)
+ *   pshufw mm7, mm0/mm1, 0xDD    ; mm7.int16[0,1] = high16 of (cx, cy)
+ *   pmaddwd mm7, mm3             ; mm7.int32[0] = cx_hi*gy_low + cy_hi*depth_hi
+ *   test eax, eax                ; sign test on low 32 bits
  *
- * Returns (gy * cx - cy * depth) >> 32 — same as dmulrethigh. */
+ * is NOT algebraically equivalent to the C fallback's
+ * `dmulrethigh(gy, cx, cy, depth) = (gy*cx - cy*depth) >> 32` — the
+ * asm uses int16-signed operands and sums two int16×int16 products,
+ * while dmulrethigh uses full int32×int32 and subtracts. They only
+ * match when gylookup is populated in the C-fallback format
+ * (`z*PREC - gposz`, full signed 32-bit). Under `USEV5ASM=1` (which
+ * this build is), gylookup is populated in the asm format
+ * (`((gposz>>j - z*PREC) >> (16-j)) & 0xFFFF`, low-16 signed
+ * int16), so the scalar port MUST use the asm's pmaddwd expression
+ * literally, and the draw-loop exit conditions must use the asm's
+ * jle/jg comparison senses.
+ *
+ * Returns cx_hi16 * gy_low16_signed + cy_hi16 * depth_hi16_signed. */
 static inline int32_t grouscan_cross_sign (int32_t cx, int32_t cy,
                                             int32_t depth, int32_t gy_raw)
 {
-	return (int32_t)(((int64_t)gy_raw * (int64_t)cx
-	                - (int64_t)cy * (int64_t)depth) >> 32);
+	int32_t gy_s16    = (int32_t)(int16_t)gy_raw;
+	int32_t depth_s16 = (int32_t)(int16_t)(depth >> 16);
+	int32_t cx_s16    = (int32_t)(int16_t)(cx >> 16);
+	int32_t cy_s16    = (int32_t)(int16_t)(cy >> 16);
+	return cx_s16 * gy_s16 + cy_s16 * depth_s16;
 }
 
 /* Scalar C port of _grouscanasm (voxasm/v5.asm). See
@@ -12735,11 +12748,10 @@ loop0:
 	}
 loop1:
 	{
-		/* C fallback pattern: `while (dmulrethigh(...) < 0) draw`.
-		 * Asm's `jle endloop1` exits on != draw; same condition via
-		 * dmulrethigh. */
+		/* Asm `jle endloop1` — exit the fill loop when the pmaddwd
+		 * sign test is ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-		if (test >= 0) goto endloop1;
+		if (test <= 0) goto endloop1;
 		/* psubd mm1, _gi — advance right-edge ray left */
 		cx1 -= gi0; cy1 -= gi1;
 		/* Store pixel + depth. */
@@ -12791,9 +12803,9 @@ loop2:
 	}
 loop3:
 	{
-		/* C fallback: `while (dmulrethigh(...) >= 0) draw`. Exit when < 0. */
+		/* Asm `jg endloop3` — exit the back-wall fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
-		if (test < 0) goto endloop3;
+		if (test > 0) goto endloop3;
 		cx0 += gi0; cy0 += gi1;
 		ebx->col = (int32_t)color;
 #if (USEZBUFFER == 1)
@@ -12819,10 +12831,9 @@ drawceil:
 	gy_raw = gylookoff[z0];
 drawceilloop:
 	{
-		/* C fallback (line 1264): `while (dmulrethigh(...) >= 0) draw`.
-		 * Exit when < 0 → goto drawflor. */
+		/* Asm `jg drawflor` — leave the ceiling fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
-		if (test < 0) goto drawflor;
+		if (test > 0) goto drawflor;
 		cx0 += gi0; cy0 += gi1;
 		/* Ceiling colour = voxel ABOVE the slab top = previous slab's
 		 * last voxel = [v - 4] in the current linked-list layout. */
@@ -12845,10 +12856,9 @@ drawflor:
 	gy_raw = gylookoff[z1];
 drawflorloop:
 	{
-		/* C fallback (line 1271): `while (dmulrethigh(...) < 0) draw`.
-		 * Exit when >= 0. */
+		/* Asm `jle enddrawflor` — leave the floor fill when ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-		if (test >= 0) goto enddrawflor;
+		if (test <= 0) goto enddrawflor;
 		cx1 -= gi0; cy1 -= gi1;
 		/* Floor colour = top voxel of CURRENT slab = [v + 4]. */
 		uint32_t vox = *(const uint32_t *)(v + 4);
@@ -12933,17 +12943,16 @@ intoslabloop:
 		gy_raw = gylookoff[v2 + 1];
 		int32_t test_hi = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
 		int32_t v0 = (int32_t)v[0];
-		/* Asm: `jg findslabloop` — test > 0 means slab is still above
-		 * the ray, skip to next. Using dmulrethigh-equivalent → the
-		 * C fallback at voxlap5.c:1293 uses `>= 0` to BREAK. Equivalent
-		 * via inverted condition. */
-		if (test_hi >= 0) {
-			/* Slab intersects. Check if NEXT slab ALSO intersects
-			 * (if so, split the cfasm entry). */
+		/* Asm `jg findslabloop` — test > 0 means the slab is still
+		 * above the ray, skip to the next slab. Otherwise the slab
+		 * intersects and we test whether the NEXT slab also does
+		 * (which would force a cfasm split). */
+		if (test_hi <= 0) {
 			int32_t next_v3 = (int32_t)v[v0 * 4 + 3];
 			gy_raw = gylookoff[next_v3];
 			int32_t test_next = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-			if (test_next >= 0) goto drawfwall;  /* single-slab, just draw */
+			/* Asm `jle drawfwall` — single-slab case, no split. */
+			if (test_next <= 0) goto drawfwall;
 
 			/* === Two-slab split ============================================
 			 * Find the split column `col` within [c->i0, c->i1] where the
