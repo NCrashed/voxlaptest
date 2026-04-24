@@ -9112,8 +9112,176 @@ char ptfaces16[43][8] =
 	6, 0,16, 48,112,96,32,0,  6, 0,16,48,112,96,64,0,  6, 0,16, 80,112,96,32,0,
 };
 
-void drawboundcubesseinit ();
-void drawboundcubesse (kv6voxtype *, int32_t);
+#include <mmintrin.h>  /* MMX intrinsics — for drawboundcubesse port */
+
+/* drawboundcubesse — voxel sprite rasterizer. Ported from v5.asm in
+ * Stage 4.4c. Renders one kv6 voxel into the framebuffer as a screen-
+ * aligned rectangle with z-buffer test.
+ *
+ * The function is called millions of times per sprite from the
+ * DRAWBOUNDCUBELINE macro inside kv6draw. Each call:
+ *   1. (mask & v->vis) early-out.
+ *   2. Origin vector = ztab4[MAXZSIZ] + ztab4[v->z]; z-component
+ *      scissor-tested against scisdist.
+ *   3. For each vertex offset in ptfaces16[effmask], project
+ *      (world_x, world_y) / world_z using rcpps.
+ *   4. Pack to int16, compute screen-space bounding rect as
+ *      (minx, miny, maxx, maxy), clip to viewport via qsum0/qsum1.
+ *   5. Fetch color modulation — pmulhuw voxel bytes by kv6colmul[dir]
+ *      and add kv6coladd[0], saturate to u8.
+ *   6. Fill rect: per pixel z-test then write color and new z.
+ *
+ * A subtle cross-call invariant: the MMX asm's `punpcklbw mm5, [eax]`
+ * ingested the low 4 bytes of mm5 from whatever the previous call's
+ * `packuswb mm5, mm5` left there. For kv6colmul != 0 the previous
+ * pixel's color contributed ~1 LSB to the current pixel via the
+ * unsigned-mul-high arithmetic. Replicated here with a static
+ * variable so bit-exact with the asm version. */
+static uint32_t drawboundcubesse_mm5_tail = 0;
+
+void drawboundcubesse (kv6voxtype *v, int32_t mask)
+{
+	int32_t effmask = mask & ((unsigned char)v->vis);
+	if (effmask == 0) return;
+
+	/* Origin vector in homogeneous coords (x, y, z, z). */
+	__m128 origin = _mm_add_ps(
+		_mm_load_ps((const float *)&ztab4[MAXZSIZ]),
+		_mm_load_ps((const float *)&ztab4[(uint16_t)v->z]));
+
+	/* Scissor distance test on origin.z (lane 2). */
+	{
+		__m128 hi = _mm_movehl_ps(origin, origin);
+		if (_mm_ucomilt_ss(hi, _mm_load_ss(&scisdist))) return;
+	}
+
+	const unsigned char *faceinfo =
+		(const unsigned char *)&ptfaces16[effmask][0];
+
+	/* Project vertex pair (0, 1): world = cadd[offset] + origin,
+	 * then screen = (x, y) / z via rcp. */
+	__m128 wv0 = _mm_add_ps(
+		_mm_load_ps((const float *)((const char *)&caddasm + faceinfo[1])),
+		origin);
+	__m128 wv1 = _mm_add_ps(
+		_mm_load_ps((const float *)((const char *)&caddasm + faceinfo[2])),
+		origin);
+	{
+		__m128 saved = wv0;
+		wv0 = _mm_movehl_ps(wv0, wv1);   /* [v1.z, v1.z, v0.z, v0.z] */
+		wv1 = _mm_movelh_ps(wv1, saved); /* [v1.x, v1.y, v0.x, v0.y] */
+	}
+	wv0 = _mm_rcp_ps(wv0);
+	__m128 pair01 = _mm_mul_ps(wv0, wv1);
+
+	/* Vertex pair (2, 3). */
+	__m128 wv2 = _mm_add_ps(
+		_mm_load_ps((const float *)((const char *)&caddasm + faceinfo[3])),
+		origin);
+	__m128 wv3 = _mm_add_ps(
+		_mm_load_ps((const float *)((const char *)&caddasm + faceinfo[4])),
+		origin);
+	{
+		__m128 saved = wv2;
+		wv2 = _mm_movehl_ps(wv2, wv3);
+		wv3 = _mm_movelh_ps(wv3, saved);
+	}
+	wv2 = _mm_rcp_ps(wv2);
+	__m128 pair23 = _mm_mul_ps(wv2, wv3);
+
+	/* Convert to int16, pack, min/max across the first two pairs. */
+	__m64 mm0 = _mm_cvttps_pi32(pair01);
+	__m128 pair01_hi = _mm_movehl_ps(pair01, pair01);
+	__m64 mm1 = _mm_cvttps_pi32(pair01_hi);
+	__m64 mm2 = _mm_cvttps_pi32(pair23);
+	__m128 pair23_hi = _mm_movehl_ps(pair23, pair23);
+	__m64 mm3 = _mm_cvttps_pi32(pair23_hi);
+	mm0 = _mm_packs_pi32(mm0, mm1);
+	mm1 = mm0;
+	mm2 = _mm_packs_pi32(mm2, mm3);
+	mm0 = _mm_min_pi16(mm0, mm2);
+	mm1 = _mm_max_pi16(mm1, mm2);
+
+	/* 6-vertex faces also process pair (4, 5). */
+	if (faceinfo[0] != 4) {
+		__m128 wv4 = _mm_add_ps(
+			_mm_load_ps((const float *)((const char *)&caddasm + faceinfo[5])),
+			origin);
+		__m128 wv5 = _mm_add_ps(
+			_mm_load_ps((const float *)((const char *)&caddasm + faceinfo[6])),
+			origin);
+		{
+			__m128 saved = wv4;
+			wv4 = _mm_movehl_ps(wv4, wv5);
+			wv5 = _mm_movelh_ps(wv5, saved);
+		}
+		wv4 = _mm_rcp_ps(wv4);
+		__m128 pair45 = _mm_mul_ps(wv4, wv5);
+		__m64 mm4 = _mm_cvttps_pi32(pair45);
+		__m128 pair45_hi = _mm_movehl_ps(pair45, pair45);
+		__m64 mm4_hi = _mm_cvttps_pi32(pair45_hi);
+		mm4 = _mm_packs_pi32(mm4, mm4_hi);
+		mm0 = _mm_min_pi16(mm0, mm4);
+		mm1 = _mm_max_pi16(mm1, mm4);
+	}
+
+	/* Reduce per-vertex min/max pairs to single rect bounds. pshufw
+	 * 0x0e selects lanes (2, 3, 0, 0) — moves the high half into the
+	 * low half so min/max collapses across it. */
+	__m64 mm0_hi = _mm_shuffle_pi16(mm0, 0x0e);
+	__m64 mm1_hi = _mm_shuffle_pi16(mm1, 0x0e);
+	mm0 = _mm_min_pi16(mm0, mm0_hi);
+	mm1 = _mm_max_pi16(mm1, mm1_hi);
+	__m64 bounds = _mm_unpacklo_pi32(mm0, mm1);
+
+	/* Viewport clip: saturated signed add qsum0 to shift into positive
+	 * range, then max with qsum1 to floor. */
+	bounds = _mm_adds_pi16(bounds, *((const __m64 *)&qsum0[0]));
+	bounds = _mm_max_pi16(bounds, *((const __m64 *)&qsum1[0]));
+
+	/* Extract (dx, dy) = (maxx - minx, maxy - miny) via pshufw 0xee
+	 * (replicate hi half) + psubusw. */
+	__m64 bounds_hi = _mm_shuffle_pi16(bounds, 0xee);
+	__m64 dxdy_m = _mm_subs_pu16(bounds_hi, bounds);
+	int32_t dxdy = _mm_cvtsi64_si32(dxdy_m);
+	int32_t dx = dxdy & 0xffff;
+	if (dx == 0) return;
+	int32_t dy = ((uint32_t)dxdy >> 16) - 1;
+	if (dy < 0) return;
+
+	/* Pixel offset = y*bytesperline + x*bpp from pmaddwd(bounds, qbplbpp). */
+	__m64 offs_m = _mm_madd_pi16(bounds, *((const __m64 *)&qbplbpp[0]));
+	int32_t offs = _mm_cvtsi64_si32(offs_m);
+
+	/* Color modulation with cross-call mm5 tail preservation. */
+	__m64 mm5 = _mm_setr_pi32((int32_t)drawboundcubesse_mm5_tail, 0);
+	mm5 = _mm_unpacklo_pi8(mm5, _mm_cvtsi32_si64(*(const int32_t *)&v->col));
+	mm5 = _mm_mulhi_pu16(mm5, *((const __m64 *)&kv6colmul[(unsigned char)v->dir]));
+	mm5 = _mm_add_pi16(mm5, *((const __m64 *)&kv6coladd[0]));
+	mm5 = _mm_packs_pu16(mm5, mm5);
+	uint32_t color = (uint32_t)_mm_cvtsi64_si32(mm5);
+	drawboundcubesse_mm5_tail = color;
+
+	/* Fill rectangle. edi = framebuffer end-of-row pointer. */
+	uint8_t *fb_row = (uint8_t *)(intptr_t)(offs + kv6frameplace) + dx * 4;
+	uint8_t *zb_row = fb_row + zbufoff;
+	float z_val = ((const float *)&origin)[2];
+
+	for (int32_t row = 0; row <= dy; row++) {
+		int32_t *fbp = (int32_t *)fb_row;
+		float *zbp = (float *)zb_row;
+		for (int32_t i = -dx; i < 0; i++) {
+			if (z_val < zbp[i]) {
+				zbp[i] = z_val;
+				fbp[i] = (int32_t)color;
+			}
+		}
+		fb_row += kv6bytesperline;
+		zb_row += kv6bytesperline;
+	}
+
+	_mm_empty(); /* emms — leave MMX state clean */
+}
 
 void drawboundcubenozsseinit();
 void drawboundcubenozsse(kv6voxtype *, int32_t);
@@ -11939,7 +12107,6 @@ fogend2:    emms
 		}
 	} else ofogdist = -1;
 
-	drawboundcubesseinit();
 	drawboundcubenozsseinit();
 }
 
