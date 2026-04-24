@@ -12768,13 +12768,12 @@ static void grouscanasm_scalar (intptr_t vptr)
 	 * vptr, the passed slab IS the top of the column → jmp drawflor.
 	 * Otherwise we're below the top → jmp drawceil. */
 	/* Draw-phase shared state. Declared before the dispatch goto so
-	 * initialisers aren't skipped on `goto drawflor/drawceil`. Note
-	 * mm5_tail is STATIC: the asm's mm5 register isn't reset by
-	 * `emms` (emms only clears the FPU tag word, not register bits),
-	 * so in practice the last shaded pixel of one gline call bleeds
-	 * into the first punpcklbw of the next. Match that bleed here so
-	 * scanline-boundary pixels line up byte-for-byte with asm. */
-	static uint32_t mm5_tail = 0;
+	 * initialisers aren't skipped on `goto drawflor/drawceil`.
+	 * Reset to 0 per call — trying to carry across calls (making
+	 * this static) produced visibly WORSE output in 4.5b.6h, so
+	 * asm's effective mm5 at call entry must be closer to zero than
+	 * to "whatever bits were left over". */
+	uint32_t mm5_tail = 0;
 	castdat *ebx = NULL;
 	uint32_t color = 0;
 	int32_t gy_raw = 0;
@@ -12863,11 +12862,15 @@ loop2:
 		uint32_t vox = *(const uint32_t *)(v + off * 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[wall_lane]);
 		gy_raw = gylookoff[z0];
+		GROUSCAN_DBG(v, "loop2 z0_new=%d off=%d vox=%08x color=%08x gy_raw=%08x",
+		             z0, off, vox, color, gy_raw);
 	}
 loop3:
 	{
 		/* Asm `jg endloop3` — exit the back-wall fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
+		GROUSCAN_DBG(v, "loop3 cx0=%08x cy0=%08x test=%d %s",
+		             cx0, cy0, test, (test > 0) ? "EXIT" : "write+advance");
 		if (test > 0) goto endloop3;
 		cx0 += gi0; cy0 += gi1;
 		ebx->col = (int32_t)color;
@@ -12892,16 +12895,24 @@ predrawceil:
 
 drawceil:
 	gy_raw = gylookoff[z0];
+	GROUSCAN_DBG(v, "drawceil-enter v[1]=%d v[2]=%d v[3]=%d z0=%d c->i0=%p c->i1=%p "
+	                "cx0=%08x cy0=%08x ogx=%08x gy_raw=%08x",
+	             (int)v[1], (int)v[2], (int)v[3], z0,
+	             (void *)c->i0, (void *)c->i1, cx0, cy0, ogx, gy_raw);
 drawceilloop:
 	{
 		/* Asm `jg drawflor` — leave the ceiling fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
+		GROUSCAN_DBG(v, "drawceil-iter cx0=%08x cy0=%08x test=%d %s",
+		             cx0, cy0, test, (test > 0) ? "->drawflor" : "write+advance");
 		if (test > 0) goto drawflor;
 		cx0 += gi0; cy0 += gi1;
 		/* Ceiling colour = voxel ABOVE the slab top = previous slab's
 		 * last voxel = [v - 4] in the current linked-list layout. */
 		uint32_t vox = *(const uint32_t *)(v - 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[2]);
+		GROUSCAN_DBG(v, "drawceil-write vox=%08x color=%08x i0=%p",
+		             vox, color, (void *)c->i0);
 		c->i0->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		c->i0->dist = ogx;
@@ -12917,15 +12928,23 @@ predrawflor:
 
 drawflor:
 	gy_raw = gylookoff[z1];
+	GROUSCAN_DBG(v, "drawflor-enter v[1]=%d v[2]=%d v[3]=%d z1=%d c->i0=%p c->i1=%p "
+	                "cx1=%08x cy1=%08x ogx=%08x gy_raw=%08x",
+	             (int)v[1], (int)v[2], (int)v[3], z1,
+	             (void *)c->i0, (void *)c->i1, cx1, cy1, ogx, gy_raw);
 drawflorloop:
 	{
 		/* Asm `jle enddrawflor` — leave the floor fill when ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
+		GROUSCAN_DBG(v, "drawflor-iter cx1=%08x cy1=%08x test=%d %s",
+		             cx1, cy1, test, (test <= 0) ? "->enddrawflor" : "write+advance");
 		if (test <= 0) goto enddrawflor;
 		cx1 -= gi0; cy1 -= gi1;
 		/* Floor colour = top voxel of CURRENT slab = [v + 4]. */
 		uint32_t vox = *(const uint32_t *)(v + 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[3]);
+		GROUSCAN_DBG(v, "drawflor-write vox=%08x color=%08x i1=%p",
+		             vox, color, (void *)c->i1);
 		c->i1->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		c->i1->dist = ogx;
