@@ -12674,6 +12674,7 @@ static void grouscanasm_scalar (intptr_t vptr)
 	int32_t cx0, cy0, cx1, cy1;                             /* mm0, mm1 */
 	int32_t gx, ogx;                                        /* mm6 lanes */
 	int32_t lane;                                           /* ebp, 0 or 1 */
+	int32_t wall_lane = 0;                                  /* mm4 caches gcsub[OLD lane] */
 	int32_t ngxmax;                                         /* local */
 	const int32_t *gylookoff;                               /* pointer into gylookup */
 	int32_t gmipcnt;                                        /* 0..gmipnum-1 */
@@ -12743,7 +12744,7 @@ loop0:
 		z1--;
 		/* Load voxel colour dword at byte offset off*4 into slab. */
 		uint32_t vox = *(const uint32_t *)(v + off * 4);
-		color = grouscan_shade(vox, &mm5_tail, &gcsub[lane]);
+		color = grouscan_shade(vox, &mm5_tail, &gcsub[wall_lane]);
 		gy_raw = gylookoff[z1];  /* NEW z1 */
 	}
 loop1:
@@ -12798,7 +12799,7 @@ loop2:
 		off = z0 - (int32_t)v[3];
 		z0++;
 		uint32_t vox = *(const uint32_t *)(v + off * 4);
-		color = grouscan_shade(vox, &mm5_tail, &gcsub[lane]);
+		color = grouscan_shade(vox, &mm5_tail, &gcsub[wall_lane]);
 		gy_raw = gylookoff[z0];
 	}
 loop3:
@@ -12884,7 +12885,14 @@ afterdelete:
 		c--;
 		if (c >= &cf[128]) goto skipixy_with_presync;
 
-		/* Column step. */
+		/* Column step. Asm caches mm4 = gcsub[OLD ebp] BEFORE
+		 * recomputing the lane (v5.asm:388). That cached value sticks
+		 * around and is used as the wall / back-wall side-shade across
+		 * every subsequent drawfwall / drawcwall fill until the next
+		 * column step overwrites it. Capture that now so the new lane
+		 * only drives the column advance / gpz update, not the wall
+		 * colour. */
+		wall_lane = lane;
 		ixy_sptr_col = (const unsigned char *const *)(
 			(const unsigned char *)ixy_sptr_col + gixy[lane]);
 		v = *ixy_sptr_col;
