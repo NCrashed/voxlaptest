@@ -12512,30 +12512,44 @@ void uninitvoxlap ()
 #ifdef VOXLAP_SCALAR_GROUSCAN
 
 #ifdef VOXLAP_SCALAR_GROUSCAN_DEBUG
-/* Debug harness for 4.5b.6g. Filters to slabs with v[1] == 178 (the
- * yellow sphere's top z in the oracle's diag_down/sprite_iso scenes),
- * caps at the first ~30 events so CI output stays manageable. Enable
- * with -DVOXLAP_SCALAR_GROUSCAN_DEBUG=ON (see CMakeLists). Output goes
- * to stderr — a matching sed/grep filter in the CI step can extract it
- * from the oracle artifact if stdout redirection gets in the way. */
+/* Debug harness for 4.5b.6g. See CMakeLists'
+ * VOXLAP_SCALAR_GROUSCAN_DEBUG option. Output goes to stderr. */
 #include <stdio.h>
-#define GROUSCAN_DBG_CAP 30
+#define GROUSCAN_DBG_CAP 120
 static int32_t groudbg_count = 0;
+static int32_t groudbg_call  = 0;   /* total grouscanasm_scalar entries */
+/* Widen filter: match any slab whose top z lands in [170, 186] — the
+ * voxel sphere's z span in the oracle scene — regardless of whether
+ * there's a next-slab or not. Catches both the single-column and
+ * edge-column layouts. */
 static int32_t groudbg_enabled (const unsigned char *v) {
 	if (groudbg_count >= GROUSCAN_DBG_CAP) return 0;
-	return (v[1] == 178 && v[0] != 0);
+	return (v[1] >= 170 && v[1] <= 186);
 }
 #define GROUSCAN_DBG(vptr, fmt, ...) \
 	do { \
 		if (groudbg_enabled(vptr)) { \
-			fprintf(stderr, "grouscan-dbg[%d] " fmt "\n", \
-			        groudbg_count, __VA_ARGS__); \
+			fprintf(stderr, "grouscan-dbg[%d call=%d] " fmt "\n", \
+			        groudbg_count, groudbg_call, __VA_ARGS__); \
+			fflush(stderr); \
 		} \
 	} while (0)
 #define GROUSCAN_DBG_TICK() do { if (groudbg_count < GROUSCAN_DBG_CAP) groudbg_count++; } while (0)
+/* Unconditional heartbeat — no filter. Bounded so we don't flood. */
+#define GROUSCAN_DBG_HEARTBEAT(fmt, ...) \
+	do { \
+		if (groudbg_call < 3) { \
+			fprintf(stderr, "grouscan-hb[call=%d] " fmt "\n", \
+			        groudbg_call, __VA_ARGS__); \
+			fflush(stderr); \
+		} \
+	} while (0)
+#define GROUSCAN_DBG_CALL_TICK() do { groudbg_call++; } while (0)
 #else
 #define GROUSCAN_DBG(vptr, fmt, ...) ((void)0)
 #define GROUSCAN_DBG_TICK() ((void)0)
+#define GROUSCAN_DBG_HEARTBEAT(fmt, ...) ((void)0)
+#define GROUSCAN_DBG_CALL_TICK() ((void)0)
 #endif
 
 /* --- Color pipeline helper ---
@@ -12692,6 +12706,13 @@ static inline int32_t grouscan_cross_sign (int32_t cx, int32_t cy,
  * C counterpart for easier auditing. */
 static void grouscanasm_scalar (intptr_t vptr)
 {
+	GROUSCAN_DBG_HEARTBEAT("entry vptr=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d",
+	                       (const void *)vptr,
+	                       (int)((const unsigned char *)vptr)[0],
+	                       (int)((const unsigned char *)vptr)[1],
+	                       (int)((const unsigned char *)vptr)[2],
+	                       (int)((const unsigned char *)vptr)[3]);
+	GROUSCAN_DBG_CALL_TICK();
 	const unsigned char *v = (const unsigned char *)vptr;   /* edi */
 	const unsigned char *const *ixy_sptr_col;               /* [esi] target */
 	cftype *c;                                              /* esp+2048 in asm */
