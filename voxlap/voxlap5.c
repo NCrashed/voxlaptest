@@ -12768,8 +12768,13 @@ static void grouscanasm_scalar (intptr_t vptr)
 	 * vptr, the passed slab IS the top of the column → jmp drawflor.
 	 * Otherwise we're below the top → jmp drawceil. */
 	/* Draw-phase shared state. Declared before the dispatch goto so
-	 * initialisers aren't skipped on `goto drawflor/drawceil`. */
-	uint32_t mm5_tail = 0;  /* matches asm's mm5 register carry across calls */
+	 * initialisers aren't skipped on `goto drawflor/drawceil`. Note
+	 * mm5_tail is STATIC: the asm's mm5 register isn't reset by
+	 * `emms` (emms only clears the FPU tag word, not register bits),
+	 * so in practice the last shaded pixel of one gline call bleeds
+	 * into the first punpcklbw of the next. Match that bleed here so
+	 * scanline-boundary pixels line up byte-for-byte with asm. */
+	static uint32_t mm5_tail = 0;
 	castdat *ebx = NULL;
 	uint32_t color = 0;
 	int32_t gy_raw = 0;
