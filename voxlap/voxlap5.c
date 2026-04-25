@@ -12511,47 +12511,6 @@ void uninitvoxlap ()
 
 #ifdef VOXLAP_SCALAR_GROUSCAN
 
-#ifdef VOXLAP_SCALAR_GROUSCAN_DEBUG
-/* Debug harness for 4.5b.6g. See CMakeLists'
- * VOXLAP_SCALAR_GROUSCAN_DEBUG option. Output goes to stderr. */
-#include <stdio.h>
-#define GROUSCAN_DBG_CAP 120
-static int32_t groudbg_count = 0;
-static int32_t groudbg_call  = 0;   /* total grouscanasm_scalar entries */
-/* Widen filter: match any slab whose top z lands in [170, 186] — the
- * voxel sphere's z span in the oracle scene — regardless of whether
- * there's a next-slab or not. Catches both the single-column and
- * edge-column layouts. */
-static int32_t groudbg_enabled (const unsigned char *v) {
-	if (groudbg_count >= GROUSCAN_DBG_CAP) return 0;
-	return (v[1] >= 170 && v[1] <= 186);
-}
-#define GROUSCAN_DBG(vptr, fmt, ...) \
-	do { \
-		if (groudbg_enabled(vptr)) { \
-			fprintf(stderr, "grouscan-dbg[%d call=%d] " fmt "\n", \
-			        groudbg_count, groudbg_call, __VA_ARGS__); \
-			fflush(stderr); \
-		} \
-	} while (0)
-#define GROUSCAN_DBG_TICK() do { if (groudbg_count < GROUSCAN_DBG_CAP) groudbg_count++; } while (0)
-/* Unconditional heartbeat — no filter. Bounded so we don't flood. */
-#define GROUSCAN_DBG_HEARTBEAT(fmt, ...) \
-	do { \
-		if (groudbg_call < 3) { \
-			fprintf(stderr, "grouscan-hb[call=%d] " fmt "\n", \
-			        groudbg_call, __VA_ARGS__); \
-			fflush(stderr); \
-		} \
-	} while (0)
-#define GROUSCAN_DBG_CALL_TICK() do { groudbg_call++; } while (0)
-#else
-#define GROUSCAN_DBG(vptr, fmt, ...) ((void)0)
-#define GROUSCAN_DBG_TICK() ((void)0)
-#define GROUSCAN_DBG_HEARTBEAT(fmt, ...) ((void)0)
-#define GROUSCAN_DBG_CALL_TICK() ((void)0)
-#endif
-
 /* --- Color pipeline helper ---
  *
  * Replicates the asm sequence:
@@ -12706,13 +12665,6 @@ static inline int32_t grouscan_cross_sign (int32_t cx, int32_t cy,
  * C counterpart for easier auditing. */
 static void grouscanasm_scalar (intptr_t vptr)
 {
-	GROUSCAN_DBG_HEARTBEAT("entry vptr=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d",
-	                       (const void *)vptr,
-	                       (int)((const unsigned char *)vptr)[0],
-	                       (int)((const unsigned char *)vptr)[1],
-	                       (int)((const unsigned char *)vptr)[2],
-	                       (int)((const unsigned char *)vptr)[3]);
-	GROUSCAN_DBG_CALL_TICK();
 	const unsigned char *v = (const unsigned char *)vptr;   /* edi */
 	const unsigned char *const *ixy_sptr_col;               /* [esi] target */
 	cftype *c;                                              /* esp+2048 in asm */
@@ -12768,11 +12720,7 @@ static void grouscanasm_scalar (intptr_t vptr)
 	 * vptr, the passed slab IS the top of the column → jmp drawflor.
 	 * Otherwise we're below the top → jmp drawceil. */
 	/* Draw-phase shared state. Declared before the dispatch goto so
-	 * initialisers aren't skipped on `goto drawflor/drawceil`.
-	 * Reset to 0 per call — trying to carry across calls (making
-	 * this static) produced visibly WORSE output in 4.5b.6h, so
-	 * asm's effective mm5 at call entry must be closer to zero than
-	 * to "whatever bits were left over". */
+	 * initialisers aren't skipped on `goto drawflor/drawceil`. */
 	uint32_t mm5_tail = 0;
 	castdat *ebx = NULL;
 	uint32_t color = 0;
@@ -12785,13 +12733,9 @@ static void grouscanasm_scalar (intptr_t vptr)
 
 drawfwall:
 	/* Front wall: fill pixels going left (decrementing ebx from c->i1). */
-	GROUSCAN_DBG(v, "drawfwall-enter v[1]=%d v[2]=%d v[3]=%d z1=%d c->i0=%p c->i1=%p "
-	                "cx1=%08x cy1=%08x ogx=%08x",
-	             (int)v[1], (int)v[2], (int)v[3], z1,
-	             (void *)c->i0, (void *)c->i1, cx1, cy1, ogx);
 	{
 		int32_t dv1 = (int32_t)v[1];
-		if (dv1 >= z1) { GROUSCAN_DBG(v, "drawfwall-skip (v[1]>=z1) ->drawcwall", 0); goto drawcwall; }
+		if (dv1 >= z1) goto drawcwall;
 		ebx = c->i1;
 	}
 loop0:
@@ -12802,16 +12746,12 @@ loop0:
 		uint32_t vox = *(const uint32_t *)(v + off * 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[wall_lane]);
 		gy_raw = gylookoff[z1];  /* NEW z1 */
-		GROUSCAN_DBG(v, "loop0 z1_new=%d off=%d vox=%08x color=%08x gy_raw=%08x",
-		             z1, off, vox, color, gy_raw);
 	}
 loop1:
 	{
 		/* Asm `jle endloop1` — exit the fill loop when the pmaddwd
 		 * sign test is ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-		GROUSCAN_DBG(v, "loop1 cx1=%08x cy1=%08x test=%d %s",
-		             cx1, cy1, test, (test <= 0) ? "EXIT" : "write+advance");
 		if (test <= 0) goto endloop1;
 		/* psubd mm1, _gi — advance right-edge ray left */
 		cx1 -= gi0; cy1 -= gi1;
@@ -12822,7 +12762,6 @@ loop1:
 #endif
 		ebx--;
 		if (ebx >= c->i0) goto loop1;
-		GROUSCAN_DBG(v, "loop1-overshoot ebx<c->i0 ->predeletez", 0);
 		goto predeletez;
 	}
 endloop1:
@@ -12862,15 +12801,11 @@ loop2:
 		uint32_t vox = *(const uint32_t *)(v + off * 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[wall_lane]);
 		gy_raw = gylookoff[z0];
-		GROUSCAN_DBG(v, "loop2 z0_new=%d off=%d vox=%08x color=%08x gy_raw=%08x",
-		             z0, off, vox, color, gy_raw);
 	}
 loop3:
 	{
 		/* Asm `jg endloop3` — exit the back-wall fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
-		GROUSCAN_DBG(v, "loop3 cx0=%08x cy0=%08x test=%d %s",
-		             cx0, cy0, test, (test > 0) ? "EXIT" : "write+advance");
 		if (test > 0) goto endloop3;
 		cx0 += gi0; cy0 += gi1;
 		ebx->col = (int32_t)color;
@@ -12895,24 +12830,16 @@ predrawceil:
 
 drawceil:
 	gy_raw = gylookoff[z0];
-	GROUSCAN_DBG(v, "drawceil-enter v[1]=%d v[2]=%d v[3]=%d z0=%d c->i0=%p c->i1=%p "
-	                "cx0=%08x cy0=%08x ogx=%08x gy_raw=%08x",
-	             (int)v[1], (int)v[2], (int)v[3], z0,
-	             (void *)c->i0, (void *)c->i1, cx0, cy0, ogx, gy_raw);
 drawceilloop:
 	{
 		/* Asm `jg drawflor` — leave the ceiling fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
-		GROUSCAN_DBG(v, "drawceil-iter cx0=%08x cy0=%08x test=%d %s",
-		             cx0, cy0, test, (test > 0) ? "->drawflor" : "write+advance");
 		if (test > 0) goto drawflor;
 		cx0 += gi0; cy0 += gi1;
 		/* Ceiling colour = voxel ABOVE the slab top = previous slab's
 		 * last voxel = [v - 4] in the current linked-list layout. */
 		uint32_t vox = *(const uint32_t *)(v - 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[2]);
-		GROUSCAN_DBG(v, "drawceil-write vox=%08x color=%08x i0=%p",
-		             vox, color, (void *)c->i0);
 		c->i0->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		c->i0->dist = ogx;
@@ -12928,23 +12855,15 @@ predrawflor:
 
 drawflor:
 	gy_raw = gylookoff[z1];
-	GROUSCAN_DBG(v, "drawflor-enter v[1]=%d v[2]=%d v[3]=%d z1=%d c->i0=%p c->i1=%p "
-	                "cx1=%08x cy1=%08x ogx=%08x gy_raw=%08x",
-	             (int)v[1], (int)v[2], (int)v[3], z1,
-	             (void *)c->i0, (void *)c->i1, cx1, cy1, ogx, gy_raw);
 drawflorloop:
 	{
 		/* Asm `jle enddrawflor` — leave the floor fill when ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-		GROUSCAN_DBG(v, "drawflor-iter cx1=%08x cy1=%08x test=%d %s",
-		             cx1, cy1, test, (test <= 0) ? "->enddrawflor" : "write+advance");
 		if (test <= 0) goto enddrawflor;
 		cx1 -= gi0; cy1 -= gi1;
 		/* Floor colour = top voxel of CURRENT slab = [v + 4]. */
 		uint32_t vox = *(const uint32_t *)(v + 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[3]);
-		GROUSCAN_DBG(v, "drawflor-write vox=%08x color=%08x i1=%p",
-		             vox, color, (void *)c->i1);
 		c->i1->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		c->i1->dist = ogx;
@@ -13032,10 +12951,6 @@ intoslabloop:
 		gy_raw = gylookoff[v2 + 1];
 		int32_t test_hi = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
 		int32_t v0 = (int32_t)v[0];
-		GROUSCAN_DBG(v, "intoslab v[0]=%d v[1]=%d v[2]=%d v[3]=%d "
-		                "z0=%d z1=%d ogx=%08x cx0=%08x cy0=%08x gy_raw=%08x test_hi=%d",
-		             (int)v[0], (int)v[1], (int)v[2], (int)v[3],
-		             z0, z1, ogx, cx0, cy0, gy_raw, test_hi);
 		/* Asm `jg findslabloop` — test > 0 means the slab is still
 		 * above the ray, skip to the next slab. Otherwise the slab
 		 * intersects and we test whether the NEXT slab also does
@@ -13044,19 +12959,8 @@ intoslabloop:
 			int32_t next_v3 = (int32_t)v[v0 * 4 + 3];
 			gy_raw = gylookoff[next_v3];
 			int32_t test_next = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-			GROUSCAN_DBG(v, "intoslab-intersect next_v3=%d cx1=%08x cy1=%08x "
-			                "gy_raw_next=%08x test_next=%d decision=%s",
-			             (int)next_v3, cx1, cy1, gy_raw, test_next,
-			             (test_next <= 0) ? "single-slab->drawfwall" : "SPLIT");
 			/* Asm `jle drawfwall` — single-slab case, no split. */
-			if (test_next <= 0) { GROUSCAN_DBG_TICK(); goto drawfwall; }
-
-			GROUSCAN_DBG(v, "split-enter v[1]=%d v[2]=%d v[3]=%d v0=%d next_v3=%d "
-			                "z0=%d z1=%d ogx=%08x gx=%08x lane=%d "
-			                "cx0=%08x cy0=%08x cx1=%08x cy1=%08x gy_raw=%08x test_next=%d",
-			             (int)v[1], (int)v[2], (int)v[3], (int)v0, (int)next_v3,
-			             z0, z1, ogx, gx, lane,
-			             cx0, cy0, cx1, cy1, gy_raw, test_next);
+			if (test_next <= 0) goto drawfwall;
 
 			/* === Two-slab split ============================================
 			 * Find the split column `col` within [c->i0, c->i1] where the
@@ -13078,18 +12982,12 @@ intoslabloop:
 			gy_raw = gylookoff[v2 + 1];
 
 			castdat *col = c->i1;
-			int32_t search_steps = 0;
 			for (;;) {
 				int32_t t = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
 				if (t <= 0) break;
 				cx1 -= gi0; cy1 -= gi1;
 				col--;
-				search_steps++;
 			}
-			GROUSCAN_DBG(v, "split-search steps=%d col_delta=%ld cx1_post=%08x cy1_post=%08x",
-			             search_steps,
-			             (long)((const castdat *)col - (const castdat *)c->i0),
-			             cx1, cy1);
 
 			/* Push new entry. cf[] has 256 slots; asm caps at cf[191]
 			 * (64 active entries) via `cmp eax, offset _cfasm[4096]`. */
@@ -13141,12 +13039,6 @@ intoslabloop:
 			c++;
 			z0 = c->z0;   /* = ORIGINAL z0, unchanged */
 			z1 = next_v3;
-			GROUSCAN_DBG(v, "split-exit c[1].i0=%p c[1].i1=%p c[1].z0=%d c[1].z1=%d "
-			                "c[0].i0=%p c[0].i1=%p c[0].z0=%d c[0].z1=%d -> drawfwall",
-			             (void *)c->i0, (void *)c->i1, c->z0, c->z1,
-			             (void *)(c - 1)->i0, (void *)(c - 1)->i1,
-			             (c - 1)->z0, (c - 1)->z1);
-			GROUSCAN_DBG_TICK();
 			goto drawfwall;
 		}
 		goto findslabloop;

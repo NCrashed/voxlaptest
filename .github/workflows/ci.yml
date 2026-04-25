@@ -112,60 +112,6 @@ jobs:
             build/oracle-run/hashes.txt
             build/oracle-run/*.png
 
-  windows-msvc-x86-scalar-grouscan-debug:
-    # Stage 4.5b.6g one-shot diagnostic: scalar build +
-    # VOXLAP_SCALAR_GROUSCAN_DEBUG=ON so grouscanasm_scalar emits stderr
-    # traces for slabs with v[1]==178 (the yellow voxel sphere's top z).
-    # Runs the oracle, tees stderr into a log file, uploads the log as
-    # an artifact. Non-fatal; exists purely to capture per-event state
-    # so we can diagnose the speckle/dark-column artifact above the
-    # sphere in diag_down / sprite_iso. Remove this job once the bug is
-    # fixed.
-    name: Scalar grouscan DEBUG trace (diagnostic only)
-    runs-on: windows-2022
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up MSVC x86 dev environment
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x86
-
-      - name: Configure (CMake, Ninja, Release, SCALAR + DEBUG flag)
-        shell: cmd
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DVOXLAP_SCALAR_GROUSCAN_DEBUG=ON
-
-      - name: Build
-        shell: cmd
-        run: cmake --build build
-
-      - name: Run oracle, capture stderr
-        shell: cmd
-        working-directory: build\oracle-run
-        # Tee stderr to a file so the artifact upload picks it up even
-        # if the run fails.
-        run: ..\bin\oracle.exe 2> grouscan-debug.log
-
-      - name: Show trace head
-        if: always()
-        shell: bash
-        run: |
-          echo "First 200 lines of grouscan-debug.log:"
-          head -n 200 build/oracle-run/grouscan-debug.log || true
-          echo ""
-          echo "Total lines: $(wc -l < build/oracle-run/grouscan-debug.log)"
-
-      - name: Upload debug trace + oracle artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: oracle-windows-msvc-x86-scalar-grouscan-debug
-          path: |
-            build/oracle-run/grouscan-debug.log
-            build/oracle-run/hashes.txt
-            build/oracle-run/*.png
-
   linux-gcc:
     name: Linux GCC (CMake configure + build, expected fail at link)
     runs-on: ubuntu-latest
