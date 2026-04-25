@@ -252,14 +252,17 @@ int32_t zbufoff;
  * Without the compile flag the macros expand to no-ops and the public
  * voxlap_trace_open/close are stubs that just discard arguments. */
 #ifdef VOXLAP_GROUSCAN_TRACE
-#include <stdio.h>
 static FILE   *vlt_fp    = NULL;
 static int32_t vlt_scene = -1;
 static int32_t vlt_call  = 0;
 static int32_t vlt_n     = 0;
-static int32_t vlt_max   = 5000000;   /* hard cap: bounds CI artifact size */
+static int32_t vlt_max   = 1000000;    /* ~150 MB worst-case; bounds CI disk */
 static castdat *vlt_base = NULL;       /* gscanptr at gline entry */
-#define VLT_OK() (vlt_fp && vlt_n < vlt_max)
+/* VLT_OK gates EVERYTHING — including the per-call counter increment.
+ * That keeps non-traced scenes (north/east/etc.) free of any side
+ * effect from the trace harness and avoids any chance of touching the
+ * fp / counters when they're stale. */
+#define VLT_OK() (vlt_fp != NULL && vlt_n < vlt_max)
 #define VLT_RAW(...) do { \
     if (VLT_OK()) { \
         fprintf(vlt_fp, "[c=%d] ", vlt_call); \
@@ -285,14 +288,16 @@ static castdat *vlt_base = NULL;       /* gscanptr at gline entry */
 VOXLAP_API void voxlap_trace_open (const char *path, int32_t scene_idx) {
 #ifdef VOXLAP_GROUSCAN_TRACE
     if (vlt_fp) { fclose(vlt_fp); vlt_fp = NULL; }
-    if (path) {
-        vlt_fp = fopen(path, "w");
-        if (vlt_fp) setvbuf(vlt_fp, NULL, _IOLBF, 0);  /* line-buffered for crash safety */
-    }
     vlt_scene = scene_idx;
     vlt_call  = 0;
     vlt_n     = 0;
-    if (vlt_fp) {
+    vlt_base  = NULL;
+    if (path) {
+        vlt_fp = fopen(path, "w");
+        if (!vlt_fp) {
+            fprintf(stderr, "voxlap_trace_open: fopen(%s) failed\n", path);
+            return;
+        }
         fprintf(vlt_fp, "# voxlap grouscan trace, scene=%d\n", scene_idx);
     }
 #else
@@ -1253,13 +1258,15 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 	}
 
 #ifdef VOXLAP_GROUSCAN_TRACE
-	vlt_call++;
-	vlt_base = gscanptr;
-	VLT_RAW("E leng=%d v=%p z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x "
-	        "gpz0=%08x gpz1=%08x gdz0=%08x gdz1=%08x gxmax=%08x gi0=%08x gi1=%08x",
-	        leng, (void *)gstartv, gstartz0, gstartz1,
-	        c->cx0, c->cy0, c->cx1, c->cy1,
-	        gpz[0], gpz[1], gdz[0], gdz[1], gxmax, gi0, gi1);
+	if (vlt_fp) {
+		vlt_call++;
+		vlt_base = gscanptr;
+		VLT_RAW("E leng=%d v=%p z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x "
+		        "gpz0=%08x gpz1=%08x gdz0=%08x gdz1=%08x gxmax=%08x gi0=%08x gi1=%08x",
+		        leng, (void *)gstartv, gstartz0, gstartz1,
+		        c->cx0, c->cy0, c->cx1, c->cy1,
+		        gpz[0], gpz[1], gdz[0], gdz[1], gxmax, gi0, gi1);
+	}
 #endif
 
 #if USEV5ASM
@@ -1322,7 +1329,10 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 drawfwall:;
 		VLT_RAW("Lfw v=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d z0=%d z1=%d "
 		        "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x",
-		        (void *)v, v[0], v[1], v[2], v[3], c->z0, c->z1,
+		        (void *)v,
+		        (int)(unsigned char)v[0], (int)(unsigned char)v[1],
+		        (int)(unsigned char)v[2], (int)(unsigned char)v[3],
+		        c->z0, c->z1,
 		        c->cx0, c->cy0, c->cx1, c->cy1, ogx, gx);
 		if (v[1] != c->z1)
 		{
@@ -1415,7 +1425,8 @@ afterdelete:;
 			c[1].z1 = c->z0 = v[v[0]*4+3];
 			VLT_RAW("Ksplit col=%ld next_v3=%d c[1].cx1=%08x c->cx0=%08x",
 			        (long)((castdat *)col - vlt_base),
-			        (int)v[v[0]*4+3], c[1].cx1, c->cx0);
+			        (int)(unsigned char)v[v[0]*4+3],
+			        c[1].cx1, c->cx0);
 			c++;
 		}
 	}
