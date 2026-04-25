@@ -112,6 +112,54 @@ jobs:
             build/oracle-run/hashes.txt
             build/oracle-run/*.png
 
+  windows-msvc-x86-usev5asm-fallback:
+    # Stage 4.5b.7 investigation: build with USEV5ASM=0 so voxlap5.c uses
+    # its own scalar C-fallback gline (lines 1220+) and the C-format
+    # gylookup. This is a third reference PNG set used for 3-way
+    # diffing against the asm path and the VOXLAP_SCALAR_GROUSCAN port,
+    # to localize the sphere-column artifact.
+    name: Windows MSVC x86 USEV5ASM=0 fallback (non-fatal reference)
+    runs-on: windows-2022
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC x86 dev environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Configure (CMake, Ninja, Release, USEV5ASM=0)
+        shell: cmd
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DVOXLAP_USEV5ASM_FALLBACK=ON
+
+      - name: Build
+        shell: cmd
+        run: cmake --build build
+
+      - name: Run oracle (writes hashes.txt + PNGs to oracle-run)
+        shell: cmd
+        working-directory: build\oracle-run
+        run: ..\bin\oracle.exe
+
+      - name: Show fallback hashes + diff against asm-frozen golden
+        shell: bash
+        run: |
+          echo "USEV5ASM=0 fallback hashes:"
+          cat build/oracle-run/hashes.txt
+          echo ""
+          echo "Diff vs asm-frozen golden-hashes.txt (drift expected — different gline):"
+          diff -u tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt || true
+
+      - name: Upload oracle artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-windows-msvc-x86-usev5asm-fallback
+          path: |
+            build/oracle-run/hashes.txt
+            build/oracle-run/*.png
+
   linux-gcc:
     name: Linux GCC (CMake configure + build, expected fail at link)
     runs-on: ubuntu-latest

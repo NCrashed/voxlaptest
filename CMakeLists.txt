@@ -79,6 +79,24 @@ if(VOXLAP_SCALAR_GROUSCAN)
     target_compile_definitions(voxlap PRIVATE VOXLAP_SCALAR_GROUSCAN)
 endif()
 
+# Stage 4.5b.7 reference build: compile voxlap with USEV5ASM=0 so gline
+# uses voxlap5.c's own scalar C-fallback (lines 1220+) along with the
+# C-format gylookup population at line 3152. Used as a known-correct
+# scalar implementation to 3-way diff against the asm path and the
+# VOXLAP_SCALAR_GROUSCAN port. Mutually exclusive with
+# VOXLAP_SCALAR_GROUSCAN — picking both would compile two different
+# gline implementations. voxasm is still linked because non-gline asm
+# data symbols (opti4asm, caddasm, ztabasm, ...) remain referenced by
+# the kv6 sprite path regardless of USEV5ASM.
+option(VOXLAP_USEV5ASM_FALLBACK "Compile voxlap with USEV5ASM=0 (C-fallback gline)" OFF)
+if(VOXLAP_USEV5ASM_FALLBACK)
+    if(VOXLAP_SCALAR_GROUSCAN)
+        message(FATAL_ERROR
+            "VOXLAP_USEV5ASM_FALLBACK and VOXLAP_SCALAR_GROUSCAN are mutually exclusive.")
+    endif()
+    target_compile_definitions(voxlap PRIVATE USEV5ASM=0)
+endif()
+
 # Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to
 # __declspec(dllexport) when building voxlap (CMake auto-defines
 # voxlap_EXPORTS for SHARED targets), __declspec(dllimport) in consumers,

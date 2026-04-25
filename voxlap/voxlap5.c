@@ -12,7 +12,9 @@
 #define PREC (256*4096)
 #define CMPPREC (256*4096)
 #define FPREC (256*4096)
+#ifndef USEV5ASM
 #define USEV5ASM 1
+#endif
 #define SCISDIST 1.0
 #define GOLDRAT 0.3819660112501052 //Golden Ratio: 1 - 1/((sqrt(5)+1)/2)
 #define ESTNORMRAD 2 //Specially optimized for 2: DON'T CHANGE unless testing!
