@@ -231,6 +231,85 @@ int32_t zbufoff;
 #ifdef __cplusplus
 }
 #endif
+
+/* --- Per-pixel grouscan trace harness (Stage 4.5b.7b) ---
+ * Compiled in via -DVOXLAP_GROUSCAN_TRACE. Both grouscanasm_scalar
+ * (when VOXLAP_SCALAR_GROUSCAN=ON) and the C-fallback gline (when
+ * USEV5ASM=0) emit matching trace records, so a per-line diff of the
+ * two logs localizes the first behavioural divergence.
+ *
+ * Record format (one event per line):
+ *   "[c=N] L<phase> <state>"            -- state at a label transition
+ *   "[c=N] W<phase> slot=K col=ARGB"    -- per-pixel write
+ *   "[c=N] X<phase> test=T"             -- test value at a loop's exit
+ *   "[c=N] K<event> <details>"          -- column-step / split / mip
+ *
+ * `c=N` is the per-call counter (incremented at gline entry).
+ * `slot=K` is the castdat offset from gscanptr at call entry — same
+ * across both implementations for the same scan, so directly diffable.
+ * `<phase>` is one of: fw fwall, cw cwall, ce ceil, fl flor.
+ *
+ * Without the compile flag the macros expand to no-ops and the public
+ * voxlap_trace_open/close are stubs that just discard arguments. */
+#ifdef VOXLAP_GROUSCAN_TRACE
+#include <stdio.h>
+static FILE   *vlt_fp    = NULL;
+static int32_t vlt_scene = -1;
+static int32_t vlt_call  = 0;
+static int32_t vlt_n     = 0;
+static int32_t vlt_max   = 5000000;   /* hard cap: bounds CI artifact size */
+static castdat *vlt_base = NULL;       /* gscanptr at gline entry */
+#define VLT_OK() (vlt_fp && vlt_n < vlt_max)
+#define VLT_RAW(...) do { \
+    if (VLT_OK()) { \
+        fprintf(vlt_fp, "[c=%d] ", vlt_call); \
+        fprintf(vlt_fp, __VA_ARGS__); \
+        fputc('\n', vlt_fp); \
+        vlt_n++; \
+    } \
+} while (0)
+#define VLT_W(phase, slot_ptr, col_val) do { \
+    if (VLT_OK()) { \
+        long _s = (long)((castdat *)(slot_ptr) - vlt_base); \
+        fprintf(vlt_fp, "[c=%d] W%s slot=%ld col=%08x\n", \
+            vlt_call, (phase), _s, (unsigned)(col_val)); \
+        vlt_n++; \
+    } \
+} while (0)
+#else
+#define VLT_OK()      0
+#define VLT_RAW(...)  ((void)0)
+#define VLT_W(...)    ((void)0)
+#endif
+
+VOXLAP_API void voxlap_trace_open (const char *path, int32_t scene_idx) {
+#ifdef VOXLAP_GROUSCAN_TRACE
+    if (vlt_fp) { fclose(vlt_fp); vlt_fp = NULL; }
+    if (path) {
+        vlt_fp = fopen(path, "w");
+        if (vlt_fp) setvbuf(vlt_fp, NULL, _IOLBF, 0);  /* line-buffered for crash safety */
+    }
+    vlt_scene = scene_idx;
+    vlt_call  = 0;
+    vlt_n     = 0;
+    if (vlt_fp) {
+        fprintf(vlt_fp, "# voxlap grouscan trace, scene=%d\n", scene_idx);
+    }
+#else
+    (void)path; (void)scene_idx;
+#endif
+}
+
+VOXLAP_API void voxlap_trace_close (void) {
+#ifdef VOXLAP_GROUSCAN_TRACE
+    if (vlt_fp) {
+        fprintf(vlt_fp, "# events=%d (max=%d, %s)\n",
+            vlt_n, vlt_max, vlt_n < vlt_max ? "complete" : "TRUNCATED");
+        fclose(vlt_fp); vlt_fp = NULL;
+    }
+#endif
+}
+
 #define gi0 (((int32_t *)&gi)[0])
 #define gi1 (((int32_t *)&gi)[1])
 
@@ -1173,6 +1252,16 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 		gcsub[1] = gcsub[(((uint32_t)gixy[1])>>31)+6];
 	}
 
+#ifdef VOXLAP_GROUSCAN_TRACE
+	vlt_call++;
+	vlt_base = gscanptr;
+	VLT_RAW("E leng=%d v=%p z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x "
+	        "gpz0=%08x gpz1=%08x gdz0=%08x gdz1=%08x gxmax=%08x gi0=%08x gi1=%08x",
+	        leng, (void *)gstartv, gstartz0, gstartz1,
+	        c->cx0, c->cy0, c->cx1, c->cy1,
+	        gpz[0], gpz[1], gdz[0], gdz[1], gxmax, gi0, gi1);
+#endif
+
 #if USEV5ASM
 	if (nskypic)
 	{
@@ -1231,6 +1320,10 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 	{
 
 drawfwall:;
+		VLT_RAW("Lfw v=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d z0=%d z1=%d "
+		        "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x",
+		        (void *)v, v[0], v[1], v[2], v[3], c->z0, c->z1,
+		        c->cx0, c->cy0, c->cx1, c->cy1, ogx, gx);
 		if (v[1] != c->z1)
 		{
 			if (v[1] > c->z1) c->z1 = v[1];
@@ -1239,6 +1332,7 @@ drawfwall:;
 				c->z1--; col = *(int32_t *)&v[(c->z1-v[1])*4+4];
 				while (dmulrethigh(gylookup[c->z1],c->cx1,c->cy1,ogx) < 0)
 				{
+					VLT_W("fw", c->i1, col);
 					c->i1->col = col; c->i1--; if (c->i0 > c->i1) goto deletez;
 					c->cx1 -= gi0; c->cy1 -= gi1;
 				}
@@ -1248,6 +1342,8 @@ drawfwall:;
 		if (v == (char *)*(int32_t *)ixy) goto drawflor;
 
 //drawcwall:;
+		VLT_RAW("Lcw z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x",
+		        c->z0, c->z1, c->cx0, c->cy0, c->cx1, c->cy1, ogx);
 		if (v[3] != c->z0)
 		{
 			if (v[3] < c->z0) c->z0 = v[3];
@@ -1256,6 +1352,7 @@ drawfwall:;
 				c->z0++; col = *(int32_t *)&v[(c->z0-v[3])*4-4];
 				while (dmulrethigh(gylookup[c->z0],c->cx0,c->cy0,ogx) >= 0)
 				{
+					VLT_W("cw", c->i0, col);
 					c->i0->col = col; c->i0++; if (c->i0 > c->i1) goto deletez;
 					c->cx0 += gi0; c->cy0 += gi1;
 				}
@@ -1263,15 +1360,21 @@ drawfwall:;
 		}
 
 drawceil:;
+		VLT_RAW("Lce z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x gx=%08x",
+		        c->z0, c->z1, c->cx0, c->cy0, c->cx1, c->cy1, gx);
 		while (dmulrethigh(gylookup[c->z0],c->cx0,c->cy0,gx) >= 0)
 		{
+			VLT_W("ce", c->i0, *(int32_t *)&v[-4]);
 			c->i0->col = (*(int32_t *)&v[-4]); c->i0++; if (c->i0 > c->i1) goto deletez;
 			c->cx0 += gi0; c->cy0 += gi1;
 		}
 
 drawflor:;
+		VLT_RAW("Lfl z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x gx=%08x",
+		        c->z0, c->z1, c->cx0, c->cy0, c->cx1, c->cy1, gx);
 		while (dmulrethigh(gylookup[c->z1],c->cx1,c->cy1,gx) < 0)
 		{
+			VLT_W("fl", c->i1, *(int32_t *)&v[4]);
 			c->i1->col = *(int32_t *)&v[4]; c->i1--; if (c->i0 > c->i1) goto deletez;
 			c->cx1 -= gi0; c->cy1 -= gi1;
 		}
@@ -1284,6 +1387,8 @@ afterdelete:;
 			gpz[j] += gdz[j];
 			j = (((uint32_t)(gpz[1]-gpz[0]))>>31);
 			ogx = gx; gx = gpz[j];
+			VLT_RAW("Kstep ixy=%08x j=%d ogx=%08x gx=%08x gpz0=%08x gpz1=%08x",
+			        ixy, j, ogx, gx, gpz[0], gpz[1]);
 
 			if (gx > gxmax) break;
 			v = (char *)*(int32_t *)ixy; c = ce;
@@ -1308,6 +1413,9 @@ afterdelete:;
 			c[1].cx1 = dax; c->cx0 = dax+gi0;
 			c[1].cy1 = day; c->cy0 = day+gi1;
 			c[1].z1 = c->z0 = v[v[0]*4+3];
+			VLT_RAW("Ksplit col=%ld next_v3=%d c[1].cx1=%08x c->cx0=%08x",
+			        (long)((castdat *)col - vlt_base),
+			        (int)v[v[0]*4+3], c[1].cx1, c->cx0);
 			c++;
 		}
 	}
@@ -12735,6 +12843,10 @@ static void grouscanasm_scalar (intptr_t vptr)
 
 drawfwall:
 	/* Front wall: fill pixels going left (decrementing ebx from c->i1). */
+	VLT_RAW("Lfw v=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d z0=%d z1=%d "
+	        "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x wlane=%d",
+	        (void *)v, v[0], v[1], v[2], v[3], z0, z1,
+	        cx0, cy0, cx1, cy1, ogx, gx, mm5_tail, wall_lane);
 	{
 		int32_t dv1 = (int32_t)v[1];
 		if (dv1 >= z1) goto drawcwall;
@@ -12754,10 +12866,11 @@ loop1:
 		/* Asm `jle endloop1` — exit the fill loop when the pmaddwd
 		 * sign test is ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-		if (test <= 0) goto endloop1;
+		if (test <= 0) { VLT_RAW("Xfw test=%d", test); goto endloop1; }
 		/* psubd mm1, _gi — advance right-edge ray left */
 		cx1 -= gi0; cy1 -= gi1;
 		/* Store pixel + depth. */
+		VLT_W("fw", ebx, color);
 		ebx->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		ebx->dist = ogx;
@@ -12773,6 +12886,8 @@ endloop1:
 
 drawcwall:
 	/* Back wall: fill pixels going right (incrementing ebx from c->i0). */
+	VLT_RAW("Lcw v=%p v[1]=%d v[3]=%d z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x",
+	        (void *)v, v[1], v[3], z0, z1, cx0, cy0, cx1, cy1, ogx);
 	{
 		/* Asm sets z1 = v[1] UNCONDITIONALLY at drawcwall entry
 		 * (`mov edx, eax` at v5.asm:266, where eax = v[1] from
@@ -12808,8 +12923,9 @@ loop3:
 	{
 		/* Asm `jg endloop3` — exit the back-wall fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
-		if (test > 0) goto endloop3;
+		if (test > 0) { VLT_RAW("Xcw test=%d", test); goto endloop3; }
 		cx0 += gi0; cy0 += gi1;
+		VLT_W("cw", ebx, color);
 		ebx->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		ebx->dist = ogx;
@@ -12832,16 +12948,19 @@ predrawceil:
 
 drawceil:
 	gy_raw = gylookoff[z0];
+	VLT_RAW("Lce z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x",
+	        z0, z1, cx0, cy0, cx1, cy1, ogx, gx, mm5_tail);
 drawceilloop:
 	{
 		/* Asm `jg drawflor` — leave the ceiling fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
-		if (test > 0) goto drawflor;
+		if (test > 0) { VLT_RAW("Xce test=%d", test); goto drawflor; }
 		cx0 += gi0; cy0 += gi1;
 		/* Ceiling colour = voxel ABOVE the slab top = previous slab's
 		 * last voxel = [v - 4] in the current linked-list layout. */
 		uint32_t vox = *(const uint32_t *)(v - 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[2]);
+		VLT_W("ce", c->i0, color);
 		c->i0->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		c->i0->dist = ogx;
@@ -12857,15 +12976,18 @@ predrawflor:
 
 drawflor:
 	gy_raw = gylookoff[z1];
+	VLT_RAW("Lfl z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x",
+	        z0, z1, cx0, cy0, cx1, cy1, ogx, gx, mm5_tail);
 drawflorloop:
 	{
 		/* Asm `jle enddrawflor` — leave the floor fill when ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-		if (test <= 0) goto enddrawflor;
+		if (test <= 0) { VLT_RAW("Xfl test=%d", test); goto enddrawflor; }
 		cx1 -= gi0; cy1 -= gi1;
 		/* Floor colour = top voxel of CURRENT slab = [v + 4]. */
 		uint32_t vox = *(const uint32_t *)(v + 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[3]);
+		VLT_W("fl", c->i1, color);
 		c->i1->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		c->i1->dist = ogx;
@@ -12911,6 +13033,8 @@ afterdelete:
 			if ((uint32_t)new_gpz > (uint32_t)ngxmax) goto remiporend;
 			gpz[lane] += gdz[lane];
 		}
+		VLT_RAW("Kstep wlane=%d lane=%d ogx=%08x gx=%08x gpz0=%08x gpz1=%08x v=%p",
+		        wall_lane, lane, ogx, gx, gpz[0], gpz[1], (void *)v);
 		c = ce;
 		/* NB: c_presync may or may not equal new c (=ce) here. The
 		 * sync at skipixy2 handles both. */
@@ -13022,6 +13146,8 @@ intoslabloop:
 			c->z0 = next_v3;
 			c->cx0 = cx1 + gi0;
 			c->cy0 = cy1 + gi1;
+			VLT_RAW("Ksplit col=%ld next_v3=%d c[1].cx1=%08x c->cx0=%08x",
+			        (long)(col - vlt_base), next_v3, c[1].cx1, c->cx0);
 
 			/* Advance into the new top slot. Register mm1 (cx1/cy1
 			 * locals) still holds the search-end value, which is what

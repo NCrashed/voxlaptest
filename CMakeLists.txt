@@ -97,6 +97,21 @@ if(VOXLAP_USEV5ASM_FALLBACK)
     target_compile_definitions(voxlap PRIVATE USEV5ASM=0)
 endif()
 
+# Stage 4.5b.7b: per-pixel grouscan trace harness. When ON, voxlap5.c
+# emits matching trace records from BOTH the scalar grouscan port and
+# the C-fallback gline (whichever is active for this build), gated by
+# voxlap_trace_open/close. The oracle harness opens a per-scene log;
+# the post-processing diff at tests/oracle/three_way_diff.py + helpers
+# compares the resulting traces. Independent of VOXLAP_SCALAR_GROUSCAN
+# / VOXLAP_USEV5ASM_FALLBACK — combine with either to trace that
+# implementation. Enable with -DVOXLAP_GROUSCAN_TRACE=ON.
+option(VOXLAP_GROUSCAN_TRACE "Emit per-pixel grouscan trace logs" OFF)
+if(VOXLAP_GROUSCAN_TRACE)
+    target_compile_definitions(voxlap PRIVATE VOXLAP_GROUSCAN_TRACE)
+    # `oracle` target is defined further down; oracle's flag is applied
+    # there once the target exists.
+endif()
+
 # Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to
 # __declspec(dllexport) when building voxlap (CMake auto-defines
 # voxlap_EXPORTS for SHARED targets), __declspec(dllimport) in consumers,
@@ -127,6 +142,9 @@ endif()
 # --------------------------------------------------------------------------
 add_executable(oracle tests/oracle/oracle.c)
 target_link_libraries(oracle PRIVATE voxlap)
+if(VOXLAP_GROUSCAN_TRACE)
+    target_compile_definitions(oracle PRIVATE VOXLAP_GROUSCAN_TRACE)
+endif()
 
 # Oracle writes hashes.txt and *.png to its CWD. Give it a dedicated dir
 # so the CI upload step has a stable path to point at.

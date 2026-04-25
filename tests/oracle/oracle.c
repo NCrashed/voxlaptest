@@ -238,8 +238,35 @@ int main(void) {
 
 		set_camera_yaw_pitch(poses[i].px, poses[i].py, poses[i].pz,
 		                     poses[i].yaw, poses[i].pitch);
+
+#ifdef VOXLAP_GROUSCAN_TRACE
+		/* Stage 4.5b.7b: per-pixel trace harness. Only open for the
+		 * high_down scene (cleanest 43-pixel sphere-edge bug locus); a
+		 * full-scene trace blows past the 5M-event cap and produces
+		 * 100+ MB logs that overwhelm CI artifact upload. The scalar
+		 * and C-fallback builds each open `trace_high_down.log`; the
+		 * post-processing line-diff at tests/oracle/trace_diff.py
+		 * compares them. Other scenes get no trace.
+		 *
+		 * Without VOXLAP_GROUSCAN_TRACE in the lib, voxlap_trace_open
+		 * is a no-op, so the unconditional call here is safe across
+		 * trace-on / trace-off builds. */
+		{
+			char trace_path[64];
+			if (strcmp(poses[i].name, "high_down") == 0) {
+				snprintf(trace_path, sizeof(trace_path),
+				         "trace_%s.log", poses[i].name);
+				voxlap_trace_open(trace_path, (int32_t)i);
+			}
+		}
+#endif
+
 		opticast();
 		if (poses[i].draw_sprite) drawsprite(&g_sprite);
+
+#ifdef VOXLAP_GROUSCAN_TRACE
+		voxlap_trace_close();
+#endif
 
 		h = fnv1a64(g_fb, sizeof(g_fb));
 		fprintf(hf,     "%s  %016llx\n", poses[i].name, (unsigned long long)h);

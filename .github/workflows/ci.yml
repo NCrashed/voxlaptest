@@ -160,6 +160,91 @@ jobs:
             build/oracle-run/hashes.txt
             build/oracle-run/*.png
 
+  windows-msvc-x86-trace-scalar:
+    # Stage 4.5b.7b: build with VOXLAP_SCALAR_GROUSCAN=ON +
+    # VOXLAP_GROUSCAN_TRACE=ON. The oracle opens trace_high_down.log
+    # before opticast() for the high_down scene only and emits
+    # per-pixel-write + label-transition trace events. Pair this run's
+    # log with the matching `windows-msvc-x86-trace-fallback` log via
+    # tests/oracle/trace_diff.py to localise the first behavioural
+    # divergence between the scalar port and the C-fallback gline.
+    name: Windows MSVC x86 scalar+trace (4.5b.7b non-fatal)
+    runs-on: windows-2022
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSVC x86 dev environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Configure (Ninja, Release, SCALAR + TRACE)
+        shell: cmd
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DVOXLAP_SCALAR_GROUSCAN=ON -DVOXLAP_GROUSCAN_TRACE=ON
+      - name: Build
+        shell: cmd
+        run: cmake --build build
+      - name: Run oracle (writes trace_high_down.log to oracle-run)
+        shell: cmd
+        working-directory: build\oracle-run
+        run: ..\bin\oracle.exe
+      - name: Trace head + size
+        shell: bash
+        run: |
+          ls -la build/oracle-run/
+          echo "--- trace_high_down.log first 40 lines ---"
+          head -40 build/oracle-run/trace_high_down.log || true
+          echo "--- trace_high_down.log last 5 lines ---"
+          tail -5 build/oracle-run/trace_high_down.log || true
+      - name: Upload trace + PNGs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-windows-msvc-x86-trace-scalar
+          path: |
+            build/oracle-run/hashes.txt
+            build/oracle-run/trace_*.log
+            build/oracle-run/*.png
+
+  windows-msvc-x86-trace-fallback:
+    # Stage 4.5b.7b twin of the scalar+trace job, using the C-fallback
+    # gline (USEV5ASM=0) as the known-correct reference.
+    name: Windows MSVC x86 fallback+trace (4.5b.7b non-fatal)
+    runs-on: windows-2022
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSVC x86 dev environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Configure (Ninja, Release, USEV5ASM=0 + TRACE)
+        shell: cmd
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DVOXLAP_USEV5ASM_FALLBACK=ON -DVOXLAP_GROUSCAN_TRACE=ON
+      - name: Build
+        shell: cmd
+        run: cmake --build build
+      - name: Run oracle (writes trace_high_down.log to oracle-run)
+        shell: cmd
+        working-directory: build\oracle-run
+        run: ..\bin\oracle.exe
+      - name: Trace head + size
+        shell: bash
+        run: |
+          ls -la build/oracle-run/
+          echo "--- trace_high_down.log first 40 lines ---"
+          head -40 build/oracle-run/trace_high_down.log || true
+          echo "--- trace_high_down.log last 5 lines ---"
+          tail -5 build/oracle-run/trace_high_down.log || true
+      - name: Upload trace + PNGs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-windows-msvc-x86-trace-fallback
+          path: |
+            build/oracle-run/hashes.txt
+            build/oracle-run/trace_*.log
+            build/oracle-run/*.png
+
   linux-gcc:
     name: Linux GCC (CMake configure + build, expected fail at link)
     runs-on: ubuntu-latest
