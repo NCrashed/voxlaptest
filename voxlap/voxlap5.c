@@ -13122,10 +13122,20 @@ intoslabloop:
 			 *
 			 * Asm's prebegsearchi16 does 16-step batches for speed; the
 			 * single-step search here is simpler and covers the same
-			 * sign-transition. */
-			c->z0 = z0; c->z1 = z1;
-			c->cx0 = cx0; c->cy0 = cy0;
-			c->cx1 = cx1; c->cy1 = cy1;
+			 * sign-transition.
+			 *
+			 * NB (Stage 4.5b.7d): do NOT pre-search-sync c.memory with
+			 * current locals. The asm's split path leaves c.memory at
+			 * whatever was last persisted (= INITIAL gline values, since
+			 * column-step's afterdelete only syncs via skipixy_with_presync
+			 * when ebx ≠ esp, never on the pure column-step path). The
+			 * shift below then copies INITIAL into c+1, and the explicit
+			 * field overrides further down only touch c[0].{cx0,cy0,z0,i0}.
+			 * c[0].{cx1,cy1,z1,i1} stay at INITIAL — which is correct: the
+			 * right edge of the lower-half pixel range is the original
+			 * gline right edge, not the post-search-end value. A pre-search
+			 * sync would write LATEST locals into those fields and corrupt
+			 * c[0] for any subsequent revisit. */
 
 			/* mm3 for the search = gylookoff[v[2]+1] (same gy_raw as
 			 * first test). Reset gy_raw in case it was overwritten by
@@ -13188,9 +13198,14 @@ intoslabloop:
 			 * iterates the wrong number of times and reads voxel colour
 			 * bytes past the slab's visible range, which shows up as
 			 * speckled garbage above tall voxel structures (e.g. the
-			 * ball in the oracle's sprite_iso / diag_down scenes). */
+			 * ball in the oracle's sprite_iso / diag_down scenes).
+			 *
+			 * z0 is NOT reloaded — locals carry forward from prior
+			 * drawing (matches asm's ECX which is never touched after
+			 * c++). Reloading from c->z0 would pull the SHIFT'd value
+			 * (= INITIAL z0) and clobber the LATEST locals z0 the asm
+			 * relies on. */
 			c++;
-			z0 = c->z0;   /* = ORIGINAL z0, unchanged */
 			z1 = next_v3;
 			goto drawfwall;
 		}
