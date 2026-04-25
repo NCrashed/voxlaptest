@@ -256,7 +256,7 @@ static FILE   *vlt_fp    = NULL;
 static int32_t vlt_scene = -1;
 static int32_t vlt_call  = 0;
 static int32_t vlt_n     = 0;
-static int32_t vlt_max   = 1000000;    /* ~150 MB worst-case; bounds CI disk */
+static int32_t vlt_max   = 5000000;    /* ~750 MB worst-case; CI artifact upload caps at 2 GB */
 static castdat *vlt_base = NULL;       /* gscanptr at gline entry */
 /* VLT_OK gates EVERYTHING — including the per-call counter increment.
  * That keeps non-traced scenes (north/east/etc.) free of any side
@@ -1328,24 +1328,26 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 
 drawfwall:;
 		VLT_RAW("Lfw v=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d z0=%d z1=%d "
-		        "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x",
+		        "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x gi0=%08x gi1=%08x",
 		        (void *)v,
 		        (int)(unsigned char)v[0], (int)(unsigned char)v[1],
 		        (int)(unsigned char)v[2], (int)(unsigned char)v[3],
 		        c->z0, c->z1,
-		        c->cx0, c->cy0, c->cx1, c->cy1, ogx, gx);
+		        c->cx0, c->cy0, c->cx1, c->cy1, ogx, gx, gi0, gi1);
 		if (v[1] != c->z1)
 		{
 			if (v[1] > c->z1) c->z1 = v[1];
 			else { do
 			{
+				int32_t _t;
 				c->z1--; col = *(int32_t *)&v[(c->z1-v[1])*4+4];
-				while (dmulrethigh(gylookup[c->z1],c->cx1,c->cy1,ogx) < 0)
+				while ((_t = dmulrethigh(gylookup[c->z1],c->cx1,c->cy1,ogx)) < 0)
 				{
 					VLT_W("fw", c->i1, col);
 					c->i1->col = col; c->i1--; if (c->i0 > c->i1) goto deletez;
 					c->cx1 -= gi0; c->cy1 -= gi1;
 				}
+				VLT_RAW("Xfw test=%d", _t);
 			} while (v[1] != c->z1); }
 		}
 
@@ -1359,34 +1361,44 @@ drawfwall:;
 			if (v[3] < c->z0) c->z0 = v[3];
 			else { do
 			{
+				int32_t _t;
 				c->z0++; col = *(int32_t *)&v[(c->z0-v[3])*4-4];
-				while (dmulrethigh(gylookup[c->z0],c->cx0,c->cy0,ogx) >= 0)
+				while ((_t = dmulrethigh(gylookup[c->z0],c->cx0,c->cy0,ogx)) >= 0)
 				{
 					VLT_W("cw", c->i0, col);
 					c->i0->col = col; c->i0++; if (c->i0 > c->i1) goto deletez;
 					c->cx0 += gi0; c->cy0 += gi1;
 				}
+				VLT_RAW("Xcw test=%d", _t);
 			} while (v[3] != c->z0); }
 		}
 
 drawceil:;
 		VLT_RAW("Lce z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x gx=%08x",
 		        c->z0, c->z1, c->cx0, c->cy0, c->cx1, c->cy1, gx);
-		while (dmulrethigh(gylookup[c->z0],c->cx0,c->cy0,gx) >= 0)
 		{
-			VLT_W("ce", c->i0, *(int32_t *)&v[-4]);
-			c->i0->col = (*(int32_t *)&v[-4]); c->i0++; if (c->i0 > c->i1) goto deletez;
-			c->cx0 += gi0; c->cy0 += gi1;
+			int32_t _t;
+			while ((_t = dmulrethigh(gylookup[c->z0],c->cx0,c->cy0,gx)) >= 0)
+			{
+				VLT_W("ce", c->i0, *(int32_t *)&v[-4]);
+				c->i0->col = (*(int32_t *)&v[-4]); c->i0++; if (c->i0 > c->i1) goto deletez;
+				c->cx0 += gi0; c->cy0 += gi1;
+			}
+			VLT_RAW("Xce test=%d", _t);
 		}
 
 drawflor:;
 		VLT_RAW("Lfl z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x gx=%08x",
 		        c->z0, c->z1, c->cx0, c->cy0, c->cx1, c->cy1, gx);
-		while (dmulrethigh(gylookup[c->z1],c->cx1,c->cy1,gx) < 0)
 		{
-			VLT_W("fl", c->i1, *(int32_t *)&v[4]);
-			c->i1->col = *(int32_t *)&v[4]; c->i1--; if (c->i0 > c->i1) goto deletez;
-			c->cx1 -= gi0; c->cy1 -= gi1;
+			int32_t _t;
+			while ((_t = dmulrethigh(gylookup[c->z1],c->cx1,c->cy1,gx)) < 0)
+			{
+				VLT_W("fl", c->i1, *(int32_t *)&v[4]);
+				c->i1->col = *(int32_t *)&v[4]; c->i1--; if (c->i0 > c->i1) goto deletez;
+				c->cx1 -= gi0; c->cy1 -= gi1;
+			}
+			VLT_RAW("Xfl test=%d", _t);
 		}
 
 afterdelete:;
@@ -12855,9 +12867,11 @@ static void grouscanasm_scalar (intptr_t vptr)
 drawfwall:
 	/* Front wall: fill pixels going left (decrementing ebx from c->i1). */
 	VLT_RAW("Lfw v=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d z0=%d z1=%d "
-	        "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x wlane=%d",
+	        "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x wlane=%d "
+	        "gi0=%08x gi1=%08x",
 	        (void *)v, v[0], v[1], v[2], v[3], z0, z1,
-	        cx0, cy0, cx1, cy1, ogx, gx, mm5_tail, wall_lane);
+	        cx0, cy0, cx1, cy1, ogx, gx, mm5_tail, wall_lane,
+	        gi0, gi1);
 	{
 		int32_t dv1 = (int32_t)v[1];
 		if (dv1 >= z1) goto drawcwall;
