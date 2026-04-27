@@ -57,6 +57,12 @@ static int32_t g_fb[XRES * YRES];
  * intrinsics. Without this, sprite rendering has zero hash coverage. */
 static vx5sprite g_sprite;
 
+/* Sprite extracted from an external KVX file (assets/coco.kvx, slab6
+ * format). Exercises the setkvx file-loader path on top of the
+ * sprite-render pipeline, ensuring the loader stays correct as the
+ * port progresses. */
+static vx5sprite g_coco_sprite;
+
 static uint64_t fnv1a64(const void *data, size_t n) {
 	const uint8_t *p = (const uint8_t *)data;
 	uint64_t h = 0xcbf29ce484222325ULL;
@@ -175,6 +181,40 @@ static void build_scene(void) {
 	g_sprite.kfatim = 0;
 	g_sprite.okfatim = 0;
 
+	/* -- External KVX sprite (assets/coco.kvx) --
+	 * Same isolation pattern as the meltsphere block above: carve a
+	 * cavity in the surrounding solid mass at (660, 660, 110), stamp
+	 * the kvx file's voxels with setkvx (which palette-maps + plants
+	 * voxels into the world voxel grid), then extract via meltsphere
+	 * to a kv6 sprite we can drawsprite anywhere in the scene. The
+	 * cavity sits well outside the 800..1248 playable box, so no
+	 * existing camera pose's frustum reaches it — adding this leaves
+	 * the first 7 hashes untouched.
+	 *
+	 * setkvx takes a path resolved relative to the oracle's CWD; the
+	 * CMakeLists.txt POST_BUILD step copies assets/ alongside oracle's
+	 * run directory so 'assets/coco.kvx' finds the file. */
+	set_curcol((int32_t)BR(0x87ceeb)); /* carve color — overwritten by setkvx */
+	a.x = 640; a.y = 640; a.z = 95;
+	b.x = 680; b.y = 680; b.z = 125;
+	setrect(&a, &b, -1);
+
+	setkvx("assets/coco.kvx", 660, 660, 110, 0, 0);
+
+	c.x = 660; c.y = 660; c.z = 110;
+	{
+		int32_t nvox = meltsphere(&g_coco_sprite, &c, 12);
+		fprintf(stderr, "meltsphere coco: %d voxels extracted\n", nvox);
+	}
+
+	g_coco_sprite.flags = 0;
+	g_coco_sprite.p.x = 1110.f; g_coco_sprite.p.y = 1080.f; g_coco_sprite.p.z = 175.f;
+	g_coco_sprite.s.x = 1.f; g_coco_sprite.s.y = 0.f; g_coco_sprite.s.z = 0.f;
+	g_coco_sprite.h.x = 0.f; g_coco_sprite.h.y = 1.f; g_coco_sprite.h.z = 0.f;
+	g_coco_sprite.f.x = 0.f; g_coco_sprite.f.y = 0.f; g_coco_sprite.f.z = 1.f;
+	g_coco_sprite.kfatim = 0;
+	g_coco_sprite.okfatim = 0;
+
 	genmipvxl(0, 0, VSID, VSID);
 }
 
@@ -198,22 +238,25 @@ struct pose {
 	const char *name;
 	double px, py, pz;
 	double yaw, pitch;
-	int32_t draw_sprite; /* 1 -> call drawsprite(&g_sprite) after opticast */
+	vx5sprite *sprite; /* NULL = no sprite, else drawsprite this kv6data */
 };
 
 int main(void) {
 	static const struct pose poses[] = {
-		{"north",        1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0, 0},
-		{"east",         1024.0, 1024.0, 128.0, 0.0,                0.0, 0},
-		{"diag_down",    1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, 0},
-		{"high_down",    1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7, 0},
+		{"north",        1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0, NULL},
+		{"east",         1024.0, 1024.0, 128.0, 0.0,                0.0, NULL},
+		{"diag_down",    1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL},
+		{"high_down",    1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7, NULL},
 		/* Sprite poses: camera aimed at g_sprite at (1050, 1050, 175).
 		 * front: eye-level, looking at sprite along +x.
 		 * above: slightly in front, pitched steeply toward the sprite.
 		 * iso:   diagonal approach, mild pitch. */
-		{"sprite_front", 1020.0, 1050.0, 175.0, 0.0,                0.0, 1},
-		{"sprite_above", 1050.0, 1050.0, 150.0, 0.0,                1.3, 1},
-		{"sprite_iso",   1020.0, 1020.0, 160.0, 0.7853981633974483, 0.4, 1},
+		{"sprite_front", 1020.0, 1050.0, 175.0, 0.0,                0.0, &g_sprite},
+		{"sprite_above", 1050.0, 1050.0, 150.0, 0.0,                1.3, &g_sprite},
+		{"sprite_iso",   1020.0, 1020.0, 160.0, 0.7853981633974483, 0.4, &g_sprite},
+		/* External KVX sprite: g_coco_sprite at (1110, 1080, 175);
+		 * camera 30u east of it looking west. */
+		{"sprite_coco",  1140.0, 1080.0, 175.0, 3.141592653589793, 0.0, &g_coco_sprite},
 	};
 	const size_t N = sizeof(poses) / sizeof(poses[0]);
 	size_t i;
@@ -240,7 +283,7 @@ int main(void) {
 		                     poses[i].yaw, poses[i].pitch);
 
 		opticast();
-		if (poses[i].draw_sprite) drawsprite(&g_sprite);
+		if (poses[i].sprite) drawsprite(poses[i].sprite);
 
 		h = fnv1a64(g_fb, sizeof(g_fb));
 		fprintf(hf,     "%s  %016llx\n", poses[i].name, (unsigned long long)h);

@@ -114,3 +114,14 @@ target_link_libraries(oracle PRIVATE voxlap)
 # so the CI upload step has a stable path to point at.
 set(ORACLE_RUN_DIR ${CMAKE_BINARY_DIR}/oracle-run)
 file(MAKE_DIRECTORY ${ORACLE_RUN_DIR})
+
+# Mirror assets/ into the oracle run dir so the harness can resolve
+# 'assets/coco.kvx' and any future external test fixtures relative to
+# its own working directory. POST_BUILD on the oracle target keeps the
+# copy in sync after every build, including incremental ones.
+add_custom_command(TARGET oracle POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/assets
+            ${ORACLE_RUN_DIR}/assets
+    COMMENT "Copying assets/ into oracle-run/assets/"
+)
