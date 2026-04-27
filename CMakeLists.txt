@@ -57,6 +57,13 @@ target_compile_definitions(voxlap PRIVATE
     $<$<NOT:$<C_COMPILER_ID:MSVC>>:NOASM>
 )
 
+# libm: needed on every Unix-like system (sqrt/sin/exp/...). MSVC bundles
+# math intrinsics into the C runtime, so this link only matters on
+# GCC/Clang. PUBLIC so consumers (oracle) inherit it transitively.
+if(NOT WIN32)
+    target_link_libraries(voxlap PUBLIC m)
+endif()
+
 # Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to
 # __declspec(dllexport) when building voxlap (CMake auto-defines
 # voxlap_EXPORTS for SHARED targets), __declspec(dllimport) in consumers,

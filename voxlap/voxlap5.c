@@ -230,9 +230,44 @@ int32_t zbufoff;
 #define gi0 (((int32_t *)&gi)[0])
 #define gi1 (((int32_t *)&gi)[1])
 
+/* Portable wrappers for the two __declspec attributes voxlap actually
+ * uses. Site rewrites: __declspec(align(N)) -> VOXLAP_ALIGN(N),
+ * __declspec(noinline) -> VOXLAP_NOINLINE. */
+#ifdef _MSC_VER
+#  define VOXLAP_ALIGN(n) __declspec(align(n))
+#  define VOXLAP_NOINLINE __declspec(noinline)
+#else
+#  define VOXLAP_ALIGN(n) __attribute__((aligned(n)))
+#  define VOXLAP_NOINLINE __attribute__((noinline))
+#  include <strings.h>      /* strcasecmp */
+#  define stricmp strcasecmp
+#endif
+
 #ifdef _MSC_VER
 #include <intrin.h>  /* _byteswap_ulong, __cpuid */
 #pragma warning(disable:4799) //I know how to use EMMS
+#else
+/* Portable shims for MSVC-only builtins. cputype dispatch has been
+ * removed; getcputype() output is informational. */
+#  if defined(__GNUC__) || defined(__clang__)
+#    define __assume(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
+#  else
+#    define __assume(cond) ((void)0)
+#  endif
+#  if (defined(__i386__) || defined(__x86_64__)) && (defined(__GNUC__) || defined(__clang__))
+#    include <cpuid.h>
+#    undef __cpuid    /* GCC <cpuid.h> defines this with a different signature */
+#    define __cpuid(arr, level) do { \
+        unsigned int __a__, __b__, __c__, __d__; \
+        __cpuid_count((unsigned)(level), 0, __a__, __b__, __c__, __d__); \
+        (arr)[0] = (int32_t)__a__; (arr)[1] = (int32_t)__b__; \
+        (arr)[2] = (int32_t)__c__; (arr)[3] = (int32_t)__d__; \
+    } while (0)
+#  else
+#    define __cpuid(arr, level) do { \
+        (arr)[0] = (arr)[1] = (arr)[2] = (arr)[3] = 0; \
+    } while (0)
+#  endif
 #endif
 
 /* --- Arithmetic / FP helpers ---------------------------------------
@@ -1829,7 +1864,10 @@ static float optistrx, optistry, optiheix, optiheiy, optiaddx, optiaddy;
 static int64_t foglut[2048], fogcol;
 static int32_t ofogdist = -1;
 
-#ifdef _MSC_VER
+/* The block below was wrapped in `#ifdef _MSC_VER` while it still
+ * contained MSVC inline asm. Stage 4.7 ported every block to portable
+ * C/intrinsics, so the guard is gone and the same source compiles on
+ * every supported toolchain. */
 
 #ifdef __cplusplus
 extern "C" {
@@ -1838,7 +1876,7 @@ extern "C" {
  * (originally `_opti4asm dd 5*4 dup(0)` with ALIGN 16). The SSE2
  * inline asm below uses `movaps xmm?, opti4asm[k*16]` which requires
  * 16-byte alignment — preserved here via __declspec(align(16)). */
-__declspec(align(16)) int32_t opti4asm[5*4];
+VOXLAP_ALIGN(16) int32_t opti4asm[5*4];
 #define opti4 ((point4d *)&opti4asm[0])
 #ifdef __cplusplus
 }
@@ -7531,7 +7569,7 @@ static int32_t inkhash (const char *filnam, int32_t *retind)
 
 //EQUIVEC code begins -----------------------------------------------------
 point3d univec[256];
-__declspec(align(8)) short iunivec[256][4];
+VOXLAP_ALIGN(8) short iunivec[256][4];
 
 typedef struct
 {
@@ -7549,7 +7587,7 @@ static _inline int32_t dmulshr0 (int32_t a, int32_t d, int32_t s, int32_t t)
 	return (int32_t)((uint32_t)((int64_t)a * d) + (uint32_t)((int64_t)s * t));
 }
 
-__declspec(noinline) void equiind2vec (int32_t i, float *x, float *y, float *z)
+VOXLAP_NOINLINE void equiind2vec (int32_t i, float *x, float *y, float *z)
 {
 	float r;
 	(*z) = (float)i*equivec.zmulk + equivec.zaddk; r = sqrt(1.f - (*z)*(*z));
@@ -8191,7 +8229,7 @@ void drawboundcubenozsse (kv6voxtype *v, int32_t mask)
 //   kv6frameplace = dafram; kv6bytesperline = dabpl;
 //}
 
-static __declspec(align(8)) short lightlist[MAXLIGHTS+1][4];
+static VOXLAP_ALIGN(8) short lightlist[MAXLIGHTS+1][4];
 static int64_t all32767 = 0x7fff7fff7fff7fff;
 
 static void updatereflects (vx5sprite *spr)
@@ -8248,7 +8286,7 @@ static void updatereflects (vx5sprite *spr)
 			             | ((int64_t)orr << 32)
 			             | ((int64_t)oa  << 48);
 		}
-	} else { fogmul = 0I64; kv6coladd[0] = 0I64; }
+	} else { fogmul = 0LL; kv6coladd[0] = 0LL; }
 
 	if (spr->flags&1)
 	{
@@ -9006,8 +9044,6 @@ static void kv6draw_noz(vx5sprite *spr)
 	}
 	_mm_empty();
 }
-
-#endif
 
 //-------------------------- KFA sprite code begins --------------------------
 
@@ -10919,12 +10955,9 @@ int32_t pngoxplc, pngoyplc, pngoxsiz, pngoysiz;
 uint32_t pngocrc, pngoadcrc;
 
 #ifdef _MSC_VER
-
-static _inline uint32_t bswap (uint32_t a)
-{
-	return _byteswap_ulong(a);
-}
-
+static _inline uint32_t bswap (uint32_t a) { return _byteswap_ulong(a); }
+#else
+static __inline__ uint32_t bswap (uint32_t a) { return __builtin_bswap32(a); }
 #endif
 
 int32_t crctab32[256];  //SEE CRC32.C
