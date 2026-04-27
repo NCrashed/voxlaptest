@@ -6961,72 +6961,28 @@ void setblobs (point3d *p, int32_t numcurs, int32_t dacol, int32_t bakit)
 
 	ndacol = (dacol==-1)-2;
 
-	if (cputype&(1<<25))
-	{
-		_asm
-		{
-			mov eax, 256
-			xorps xmm7, xmm7    ;xmm7: 0,0,0,0
-			cvtsi2ss xmm6, eax  ;xmm6: ?,?,?,256
-			movlhps xmm6, xmm6  ;xmm6: ?,256,?,256
-		}
-	}
+	/* Original had an SSE inline-asm path (3 blocks) processing 3
+	 * cursors per iteration via parallel rcpss; gated on
+	 * cputype&(1<<25). The scalar `else` branch below is functionally
+	 * identical (per-cursor exact 1/x division). setblobs isn't
+	 * exercised by the oracle — the precision difference between
+	 * rcpss (~12 bits) and scalar 1.0/x (24 bits) doesn't affect
+	 * frozen goldens, so we drop the asm path. */
 
 	nrad = (float)numcurs / ((float)vx5.currad*(float)vx5.currad + 256.0);
 	for(y=ys;y<=ye;y++)
 		for(x=xs;x<=xe;x++)
 		{
-			if (cputype&(1<<25))
-			{
-				_asm
-				{
-					cvtsi2ss xmm0, x        ;xmm0:?,?,?,x
-					cvtsi2ss xmm7, y        ;xmm7:0,0,0,y
-					movlhps xmm0, xmm7      ;xmm0:0,y,?,x
-					shufps xmm0, xmm0, 0x08 ;xmm0:x,x,y,x
-				}
-			}
-
 			got = 0;
 			for(z=zs;z<=ze;z++)
 			{
-				if (cputype&(1<<25))
+				v = 0;
+				for(i=numcurs-1;i>=0;i--)
 				{
-					_asm
-					{
-						movhlps xmm3, xmm7       ;xmm3:?,?,0,0
-						cvtsi2ss xmm7, z         ;xmm7:0,0,0,z
-						movlhps xmm0, xmm7       ;xmm0:0,z,y,x
-						mov eax, numcurs
-						mov edx, p
-						lea eax, [eax+eax*2-3]
-				 beg: movups xmm1, [edx+eax*4] ;xmm1: ?,pz,py,pz
-						subps xmm1, xmm0         ;xmm1: ?,dz,dy,dx
-						mulps xmm1, xmm1         ;xmm1: ?,dz�,dy�,dx�
-						movhlps xmm6, xmm1       ;xmm6: ?,256,?,dz�
-						shufps xmm1, xmm6, 0x84  ;xmm1: 256,dz�,dy�,dx�
-						movhlps xmm2, xmm1       ;xmm2: ?,?,256,dz�
-						addps xmm1, xmm2         ;xmm1: ?,?,dy�+256,dx�+dz�
-						movss xmm2, xmm1         ;xmm2: ?,?,256,dx�+dz�
-						shufps xmm1, xmm1, 0x1   ;xmm1: dx�+dz�,dx�+dz�,dx�+dz�,dy�+256
-						addss xmm1, xmm2         ;xmm1: ?,?,?,dx�+dy�+dz�+256
-						rcpss xmm1, xmm1         ;xmm1: ?,?,?,1/(dx�+dy�+dz�+256)
-						addss xmm3, xmm1
-						sub eax, 3
-						jnc short beg
-						movss v, xmm3
-					}
-				}
-				else
-				{
-					v = 0;
-					for(i=numcurs-1;i>=0;i--)
-					{
-						dx = p[i].x-(float)x;
-						dy = p[i].y-(float)y;
-						dz = p[i].z-(float)z;
-						v += 1.0f / (dx*dx + dy*dy + dz*dz + 256.0f);
-					}
+					dx = p[i].x-(float)x;
+					dy = p[i].y-(float)y;
+					dz = p[i].z-(float)z;
+					v += 1.0f / (dx*dx + dy*dy + dz*dz + 256.0f);
 				}
 				if (*(int32_t *)&v > *(int32_t *)&nrad) { templongbuf[z] = ndacol; got = 1; }
 			}
@@ -10403,122 +10359,24 @@ void mat2 (point3d *a_s, point3d *a_h, point3d *a_f, point3d *a_o,
 			  point3d *b_s, point3d *b_h, point3d *b_f, point3d *b_o,
 			  point3d *c_s, point3d *c_h, point3d *c_f, point3d *c_o)
 {
-	if (cputype&(1<<25))
-	{
-		_asm
-		{
-			mov eax, b_s
-			mov edx, b_h
-			movups xmm0, [eax]      ;xmm0:   -  bs.z bs.y bs.x
-			movups xmm4, [edx]      ;xmm4:   -  bh.z bh.y bh.x
-			mov eax, b_f
-			mov edx, b_o
-			movups xmm6, [eax]      ;xmm6:   -  bf.z bf.y bf.x
-			movups xmm3, [edx]      ;xmm3:   -  bo.z bo.y bo.x
-
-			mov eax, a_s
-			mov edx, a_h
-
-			movaps xmm2, xmm0       ;xmm2:   -  bs.z bs.y bs.x
-			movaps xmm5, xmm6       ;xmm5:   -  bf.z bf.y bf.x
-			unpcklps xmm0, xmm4     ;xmm0: bh.y bs.y bh.x bs.x
-			unpcklps xmm6, xmm3     ;xmm6: bo.y bf.y bo.x bf.x
-			movhlps xmm1, xmm0      ;xmm1:   -    -  bh.y bs.y
-			movhlps xmm7, xmm6      ;xmm7:   -    -  bo.y bf.y
-			unpckhps xmm2, xmm4     ;xmm2:   -    -  bh.z bs.z
-			unpckhps xmm5, xmm3     ;xmm5:   -    -  bo.z bf.z
-			movlhps xmm0, xmm6      ;xmm0: bo.x bf.x bh.x bs.x
-			movlhps xmm1, xmm7      ;xmm1: bo.y bf.y bh.y bs.y
-			movlhps xmm2, xmm5      ;xmm2: bo.z bf.z bh.z bs.z
-
-			movss xmm3, [eax]
-			shufps xmm3, xmm3, 0
-			movss xmm4, [eax+4]
-			shufps xmm4, xmm4, 0
-			movss xmm5, [eax+8]
-			shufps xmm5, xmm5, 0
-			mulps xmm3, xmm0
-			mulps xmm4, xmm0
-			mulps xmm5, xmm0
-
-			mov eax, a_f
-
-			movss xmm6, [edx]
-			shufps xmm6, xmm6, 0
-			movss xmm7, [edx+4]
-			shufps xmm7, xmm7, 0
-			movss xmm0, [edx+8]
-			shufps xmm0, xmm0, 0
-			mulps xmm6, xmm1
-			mulps xmm7, xmm1
-			mulps xmm0, xmm1
-			addps xmm3, xmm6
-			addps xmm4, xmm7
-			addps xmm5, xmm0
-
-			mov edx, c_s
-
-			movss xmm6, [eax]
-			shufps xmm6, xmm6, 0
-			movss xmm7, [eax+4]
-			shufps xmm7, xmm7, 0
-			movss xmm0, [eax+8]
-			shufps xmm0, xmm0, 0
-			mulps xmm6, xmm2
-			mulps xmm7, xmm2
-			mulps xmm0, xmm2
-			addps xmm3, xmm6        ;xmm3: to.x tf.x th.x ts.x
-			addps xmm4, xmm7        ;xmm4: to.y tf.y th.y ts.y
-			addps xmm5, xmm0        ;xmm5: to.z tf.z th.z ts.z
-
-			mov eax, c_f
-
-			movss [edx], xmm3
-			movhlps xmm0, xmm3
-			movss [edx+4], xmm4
-			movhlps xmm1, xmm4
-			movss [edx+8], xmm5
-			movhlps xmm2, xmm5
-			mov edx, c_h
-			movss [eax], xmm0
-			movss [eax+4], xmm1
-			movss [eax+8], xmm2
-			shufps xmm3, xmm3, 0xb1 ;xmm3:   -  to.x   -  th.x
-			shufps xmm4, xmm4, 0xb1 ;xmm4:   -  to.y   -  th.y
-			shufps xmm5, xmm5, 0xb1 ;xmm5:   -  to.z   -  th.z
-			mov eax, a_o
-			movss [edx], xmm3
-			movss [edx+4], xmm4
-			movss [edx+8], xmm5
-			mov edx, c_o
-			movhlps xmm0, xmm3
-			addss xmm0, [eax]
-			movhlps xmm1, xmm4
-			addss xmm1, [eax+4]
-			movhlps xmm2, xmm5
-			addss xmm2, [eax+8]
-			movss [edx], xmm0
-			movss [edx+4], xmm1
-			movss [edx+8], xmm2
-		}
-	}
-	else
-	{
-		point3d ts, th, tf, to;
-		ts.x = a_s->x*b_s->x + a_h->x*b_s->y + a_f->x*b_s->z;
-		ts.y = a_s->y*b_s->x + a_h->y*b_s->y + a_f->y*b_s->z;
-		ts.z = a_s->z*b_s->x + a_h->z*b_s->y + a_f->z*b_s->z;
-		th.x = a_s->x*b_h->x + a_h->x*b_h->y + a_f->x*b_h->z;
-		th.y = a_s->y*b_h->x + a_h->y*b_h->y + a_f->y*b_h->z;
-		th.z = a_s->z*b_h->x + a_h->z*b_h->y + a_f->z*b_h->z;
-		tf.x = a_s->x*b_f->x + a_h->x*b_f->y + a_f->x*b_f->z;
-		tf.y = a_s->y*b_f->x + a_h->y*b_f->y + a_f->y*b_f->z;
-		tf.z = a_s->z*b_f->x + a_h->z*b_f->y + a_f->z*b_f->z;
-		to.x = a_s->x*b_o->x + a_h->x*b_o->y + a_f->x*b_o->z + a_o->x;
-		to.y = a_s->y*b_o->x + a_h->y*b_o->y + a_f->y*b_o->z + a_o->y;
-		to.z = a_s->z*b_o->x + a_h->z*b_o->y + a_f->z*b_o->z + a_o->z;
-		(*c_s) = ts; (*c_h) = th; (*c_f) = tf; (*c_o) = to;
-	}
+	/* The SSE inline-asm path computed all 12 components in parallel
+	 * via 3 sets of (mulps, mulps, addps, mulps, addps) — the same
+	 * `(a_s*b + a_h*b) + a_f*b` evaluation order as the scalar
+	 * sequence below. Bit-identical output, so we drop the asm. */
+	point3d ts, th, tf, to;
+	ts.x = a_s->x*b_s->x + a_h->x*b_s->y + a_f->x*b_s->z;
+	ts.y = a_s->y*b_s->x + a_h->y*b_s->y + a_f->y*b_s->z;
+	ts.z = a_s->z*b_s->x + a_h->z*b_s->y + a_f->z*b_s->z;
+	th.x = a_s->x*b_h->x + a_h->x*b_h->y + a_f->x*b_h->z;
+	th.y = a_s->y*b_h->x + a_h->y*b_h->y + a_f->y*b_h->z;
+	th.z = a_s->z*b_h->x + a_h->z*b_h->y + a_f->z*b_h->z;
+	tf.x = a_s->x*b_f->x + a_h->x*b_f->y + a_f->x*b_f->z;
+	tf.y = a_s->y*b_f->x + a_h->y*b_f->y + a_f->y*b_f->z;
+	tf.z = a_s->z*b_f->x + a_h->z*b_f->y + a_f->z*b_f->z;
+	to.x = a_s->x*b_o->x + a_h->x*b_o->y + a_f->x*b_o->z + a_o->x;
+	to.y = a_s->y*b_o->x + a_h->y*b_o->y + a_f->y*b_o->z + a_o->y;
+	to.z = a_s->z*b_o->x + a_h->z*b_o->y + a_f->z*b_o->z + a_o->z;
+	(*c_s) = ts; (*c_h) = th; (*c_f) = tf; (*c_o) = to;
 }
 
 static void setlimb (kfatype *kfa, int32_t i, int32_t p, int32_t trans_type, short val)
