@@ -48,9 +48,13 @@ target_include_directories(voxlap PUBLIC
 )
 
 target_compile_definitions(voxlap PRIVATE
-    WIN32
-    _WINDOWS
-    _USRDLL
+    $<$<BOOL:${WIN32}>:WIN32>
+    $<$<BOOL:${WIN32}>:_WINDOWS>
+    $<$<BOOL:${WIN32}>:_USRDLL>
+    # kplib.c has MSVC inline-asm fast paths; NOASM forces the portable C
+    # fallback on non-MSVC compilers. Drop once kplib's GCC asm path is
+    # ported to x86_64 (today only an i386 path exists).
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:NOASM>
 )
 
 # Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to

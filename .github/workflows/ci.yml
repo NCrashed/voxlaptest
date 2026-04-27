@@ -60,9 +60,8 @@ jobs:
             build/oracle-run/*.png
 
   linux-gcc:
-    name: Linux GCC (CMake configure + build, expected fail at link)
+    name: Linux GCC (CMake configure + build)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
@@ -72,15 +71,11 @@ jobs:
       - name: Configure (CMake)
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc
       - name: Build
-        # Stage 4.6 removed v5.asm; remaining MSVC inline asm in voxlap5.c
-        # (Stage 2 of PORTING.md) is what still blocks GCC. Non-fatal
-        # so we can watch the build go green as inline asm gets ported.
         run: cmake --build build
 
   linux-clang:
-    name: Linux Clang (CMake configure + build, expected fail at link)
+    name: Linux Clang (CMake configure + build)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
@@ -93,9 +88,8 @@ jobs:
         run: cmake --build build
 
   macos-clang:
-    name: macOS Clang (CMake configure + build, expected fail at link)
+    name: macOS Clang (CMake configure + build)
     runs-on: macos-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
