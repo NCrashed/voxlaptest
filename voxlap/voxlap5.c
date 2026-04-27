@@ -9173,21 +9173,27 @@ static void updatereflects (vx5sprite *spr)
 		if (i > 4095) i = 4095;
 		fogmul = foglut[i];
 
-#if 0
-		i = (int32_t)(*(short *)&fogmul);
-		((short *)kv6coladd)[0] = (short)((((int32_t)(((short *)&fogcol)[0]))*i)>>1);
-		((short *)kv6coladd)[1] = (short)((((int32_t)(((short *)&fogcol)[1]))*i)>>1);
-		((short *)kv6coladd)[2] = (short)((((int32_t)(((short *)&fogcol)[2]))*i)>>1);
-#else
-		_asm
+		/* Per-channel: kv6coladd_word = (fogcol_byte * 2 * fogmul_word) >> 16
+		 * = (fogcol_byte * fogmul_word) >> 15. Word layout: B/G/R/A.
+		 * Original asm did `paddd mm0,mm0` (×2 each int32 lane) then
+		 * `pmulhuw mm0, fogmul` (unsigned 16×16→hi-16 per word). The dead
+		 * `#if 0` C variant above was buggy (>>1 instead of >>16). */
 		{
-			movq mm0, fogcol
-			paddd mm0, mm0
-			pmulhuw mm0, fogmul
-			movq kv6coladd[0], mm0
-			emms
+			uint64_t fcol = (uint64_t)fogcol;
+			uint16_t fmw  = (uint16_t)((uint64_t)fogmul & 0xffffu);
+			uint16_t b = (uint16_t)((fcol >>  0) & 0xffu);
+			uint16_t g = (uint16_t)((fcol >> 16) & 0xffu);
+			uint16_t r = (uint16_t)((fcol >> 32) & 0xffu);
+			uint16_t a = (uint16_t)((fcol >> 48) & 0xffu);
+			uint16_t ob = (uint16_t)(((uint32_t)(b*2u) * fmw) >> 16);
+			uint16_t og = (uint16_t)(((uint32_t)(g*2u) * fmw) >> 16);
+			uint16_t orr= (uint16_t)(((uint32_t)(r*2u) * fmw) >> 16);
+			uint16_t oa = (uint16_t)(((uint32_t)(a*2u) * fmw) >> 16);
+			kv6coladd[0] = ((int64_t)ob)
+			             | ((int64_t)og  << 16)
+			             | ((int64_t)orr << 32)
+			             | ((int64_t)oa  << 48);
 		}
-#endif
 	} else { fogmul = 0I64; kv6coladd[0] = 0I64; }
 
 	if (spr->flags&1)
@@ -9231,24 +9237,27 @@ static void updatereflects (vx5sprite *spr)
 			lightlist[0][1] = (short)(tp.y*f);
 			lightlist[0][2] = (short)(tp.z*f);
 			lightlist[0][3] = (short)(g*128.f);
-			_asm
+			/* Per i: dot = pmaddwd(iunivec[i], lightlist[0]) summed
+			 * across the two int32 lanes (paddd wraps modulo 2^32).
+			 * pshufw 0x55 broadcasts word 1 (bits 16..31 of the low
+			 * dword) to all 4 word slots. */
 			{
-				movq mm6, lightlist[0]
-				mov ecx, 255*8
-  nolighta: movq mm0, iunivec[ecx]
-				movq mm1, iunivec[ecx-8]
-				pmaddwd mm0, mm6 ;mm0: [tp.a*iunivec.a + tp.z*iunivec.z][tp.y*iunivec.y + tp.x*iunivec.x]
-				pmaddwd mm1, mm6
-				pshufw mm2, mm0, 0x4e  ;Before: mm0: [ 0 ][ a ][   ][   ][ 0 ][ b ][   ][   ]
-				pshufw mm3, mm1, 0x4e
-				paddd mm0, mm2
-				paddd mm1, mm3
-				pshufw mm0, mm0, 0x55
-				pshufw mm1, mm1, 0x55  ;After:  mm0: [   ][   ][   ][a+b][   ][a+b][   ][a+b]
-				movq kv6colmul[ecx], mm0
-				movq kv6colmul[ecx-8], mm1
-				sub ecx, 2*8
-				jnc short nolighta
+				int16_t L0 = lightlist[0][0];
+				int16_t L1 = lightlist[0][1];
+				int16_t L2 = lightlist[0][2];
+				int16_t L3 = lightlist[0][3];
+				int32_t k;
+				for (k = 255; k >= 0; k--) {
+					uint32_t lo = (uint32_t)((int32_t)iunivec[k][0]*L0)
+					            + (uint32_t)((int32_t)iunivec[k][1]*L1);
+					uint32_t hi = (uint32_t)((int32_t)iunivec[k][2]*L2)
+					            + (uint32_t)((int32_t)iunivec[k][3]*L3);
+					uint16_t W = (uint16_t)((lo + hi) >> 16);
+					kv6colmul[k] = (int64_t)((uint64_t)W
+					                         | ((uint64_t)W << 16)
+					                         | ((uint64_t)W << 32)
+					                         | ((uint64_t)W << 48));
+				}
 			}
 		}
 		else
@@ -9258,30 +9267,43 @@ static void updatereflects (vx5sprite *spr)
 			lightlist[0][1] = (short)(tp.y*f);
 			lightlist[0][2] = (short)(tp.z*f);
 			lightlist[0][3] = (short)(g*128.f);
-			_asm
+			/* Same dot+broadcast as nolighta, then pmulhuw against
+			 * mm5 = punpcklbw(garbage, vx5.kv6col). The original
+			 * relied on mm5's low byte being whatever junk sat in
+			 * the register on entry — mm5 word_i = (junk_byte_i
+			 * | (kv6col_byte_i << 8)). Port models junk as 0 (the
+			 * cleanest deterministic state); contribution of junk
+			 * to the high 16 of pmulhuw is at most ~1 LSB, which is
+			 * what the asm comment "emms not necessary" implicitly
+			 * relied on. Word layout of vx5.kv6col bytes: B/G/R/A. */
 			{
-				punpcklbw mm5, vx5.kv6col
-				movq mm6, lightlist[0]
-				mov ecx, 255*8
-  nolightb: movq mm0, iunivec[ecx]
-				movq mm1, iunivec[ecx-8]
-				pmaddwd mm0, mm6 ;mm0: [tp.a*iunivec.a + tp.z*iunivec.z][tp.y*iunivec.y + tp.x*iunivec.x]
-				pmaddwd mm1, mm6
-				pshufw mm2, mm0, 0x4e ;Before: mm0: [ 0 ][ a ][   ][   ][ 0 ][ b ][   ][   ]
-				pshufw mm3, mm1, 0x4e
-				paddd mm0, mm2
-				paddd mm1, mm3
-				pshufw mm0, mm0, 0x55
-				pshufw mm1, mm1, 0x55 ;After:  mm0: [   ][   ][   ][a+b][   ][a+b][   ][a+b]
-				pmulhuw mm0, mm5
-				pmulhuw mm1, mm5
-				movq kv6colmul[ecx], mm0
-				movq kv6colmul[ecx-8], mm1
-				sub ecx, 2*8
-				jnc short nolightb
+				int16_t L0 = lightlist[0][0];
+				int16_t L1 = lightlist[0][1];
+				int16_t L2 = lightlist[0][2];
+				int16_t L3 = lightlist[0][3];
+				uint32_t kvc = (uint32_t)vx5.kv6col;
+				uint16_t M0 = (uint16_t)(((kvc >>  0) & 0xffu) << 8);
+				uint16_t M1 = (uint16_t)(((kvc >>  8) & 0xffu) << 8);
+				uint16_t M2 = (uint16_t)(((kvc >> 16) & 0xffu) << 8);
+				uint16_t M3 = (uint16_t)(((kvc >> 24) & 0xffu) << 8);
+				int32_t k;
+				for (k = 255; k >= 0; k--) {
+					uint32_t lo = (uint32_t)((int32_t)iunivec[k][0]*L0)
+					            + (uint32_t)((int32_t)iunivec[k][1]*L1);
+					uint32_t hi = (uint32_t)((int32_t)iunivec[k][2]*L2)
+					            + (uint32_t)((int32_t)iunivec[k][3]*L3);
+					uint16_t W = (uint16_t)((lo + hi) >> 16);
+					uint16_t w0 = (uint16_t)(((uint32_t)W * M0) >> 16);
+					uint16_t w1 = (uint16_t)(((uint32_t)W * M1) >> 16);
+					uint16_t w2 = (uint16_t)(((uint32_t)W * M2) >> 16);
+					uint16_t w3 = (uint16_t)(((uint32_t)W * M3) >> 16);
+					kv6colmul[k] = (int64_t)((uint64_t)w0
+					                         | ((uint64_t)w1 << 16)
+					                         | ((uint64_t)w2 << 32)
+					                         | ((uint64_t)w3 << 48));
+				}
 			}
 		}
-		//NOTE: emms not necessary!
 	}
 	else
 	{
@@ -9347,36 +9369,61 @@ static void updatereflects (vx5sprite *spr)
 		lightlist[lightcnt][1] = (short)((sprh.x*fx + sprh.y*fy + sprh.z*fz)*hh);
 		lightlist[lightcnt][2] = (short)((sprf.x*fx + sprf.y*fy + sprf.z*fz)*hh);
 		lightlist[lightcnt][3] = (short)(hh*(48/16.0));
-		_asm
+		/* lightmode==2 path: base = lightlist[lightcnt] dot iunivec[i]
+		 * then for each k = lightcnt-1..0, dot = lightlist[k] dot
+		 * iunivec[i]; if dot is "negative" (16-bit-lane sense), base -=
+		 * dot. The clamp uses pminsw across 16-bit lanes despite the
+		 * data being conceptually 2 int32 lanes — the asm comment
+		 * "16-bits is ugly, but ok here" notes this lane-mismatch
+		 * quirk: a positive int32 dot whose low16 has bit 15 set still
+		 * gets the low16 subtracted. Light magnitudes stay clamped so
+		 * the spurious contribution is negligible. mm5 punpcklbw
+		 * garbage modeled as 0 (same as nolightb). */
 		{
-			punpcklbw mm5, vx5.kv6col
-			pxor mm6, mm6
-			mov edx, lightcnt
-			shl edx, 3
-			mov ecx, 255*8
-beglig:  movq mm3, iunivec[ecx]   ;mm3: 256 u[i].z*256 u[i].y*256 u[i].x*256
-			mov eax, edx
-			movq mm0, lightlist[edx] ;mm0: 48*256,0 tp.z*256 tp.y*256 tp.x*256
-			pmaddwd mm0, mm3
-			pshufw mm2, mm0, 0x4e
-			paddd mm0, mm2
-			sub eax, 8
-			js short endlig
-beglig2: movq mm1, lightlist[eax] ;mm1: 0 tp.z*256 tp.y*256 tp.x*256
-			pmaddwd mm1, mm3
-			pshufw mm2, mm1, 0x4e
-			paddd mm1, mm2
-			pminsw mm1, mm6          ;16-bits is ugly, but ok here
-			psubd mm0, mm1
-			sub eax, 8
-			jns short beglig2        ;mm0: 00 II ii ii 00 II ii ii
-endlig:  pshufw mm0, mm0, 0x55    ;mm0: 00 II 00 II 00 II 00 II
-			pmulhuw mm0, mm5
-			movq kv6colmul[ecx], mm0
-			sub ecx, 8
-			jnc short beglig
+			uint32_t kvc = (uint32_t)vx5.kv6col;
+			uint16_t M0 = (uint16_t)(((kvc >>  0) & 0xffu) << 8);
+			uint16_t M1 = (uint16_t)(((kvc >>  8) & 0xffu) << 8);
+			uint16_t M2 = (uint16_t)(((kvc >> 16) & 0xffu) << 8);
+			uint16_t M3 = (uint16_t)(((kvc >> 24) & 0xffu) << 8);
+			int32_t idx;
+			for (idx = 255; idx >= 0; idx--) {
+				int16_t U0 = iunivec[idx][0];
+				int16_t U1 = iunivec[idx][1];
+				int16_t U2 = iunivec[idx][2];
+				int16_t U3 = iunivec[idx][3];
+				uint32_t lo = (uint32_t)((int32_t)U0*lightlist[lightcnt][0])
+				            + (uint32_t)((int32_t)U1*lightlist[lightcnt][1]);
+				uint32_t hi = (uint32_t)((int32_t)U2*lightlist[lightcnt][2])
+				            + (uint32_t)((int32_t)U3*lightlist[lightcnt][3]);
+				uint32_t base = lo + hi;  /* both int32 lanes hold this */
+				int32_t k;
+				for (k = lightcnt - 1; k >= 0; k--) {
+					uint32_t klo = (uint32_t)((int32_t)U0*lightlist[k][0])
+					             + (uint32_t)((int32_t)U1*lightlist[k][1]);
+					uint32_t khi = (uint32_t)((int32_t)U2*lightlist[k][2])
+					             + (uint32_t)((int32_t)U3*lightlist[k][3]);
+					uint32_t dot = klo + khi;
+					int16_t lo16 = (int16_t)(dot & 0xffffu);
+					int16_t hi16 = (int16_t)((dot >> 16) & 0xffffu);
+					int16_t lo16c = (lo16 < 0) ? lo16 : 0;
+					int16_t hi16c = (hi16 < 0) ? hi16 : 0;
+					uint32_t sub = ((uint32_t)(uint16_t)hi16c << 16)
+					             | (uint32_t)(uint16_t)lo16c;
+					base -= sub;
+				}
+				{
+					uint16_t W = (uint16_t)(base >> 16);
+					uint16_t w0 = (uint16_t)(((uint32_t)W * M0) >> 16);
+					uint16_t w1 = (uint16_t)(((uint32_t)W * M1) >> 16);
+					uint16_t w2 = (uint16_t)(((uint32_t)W * M2) >> 16);
+					uint16_t w3 = (uint16_t)(((uint32_t)W * M3) >> 16);
+					kv6colmul[idx] = (int64_t)((uint64_t)w0
+					                           | ((uint64_t)w1 << 16)
+					                           | ((uint64_t)w2 << 32)
+					                           | ((uint64_t)w3 << 48));
+				}
+			}
 		}
-		//NOTE: emms not necessary!
 	}
 }
 
