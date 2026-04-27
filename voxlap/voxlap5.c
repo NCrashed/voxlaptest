@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <xmmintrin.h>  /* SSE intrinsics — load/store/add/mul/... _ps */
+#include <mmintrin.h>   /* MMX intrinsics — _mm_empty / __m64 ops */
 #define VOXLAP5
 #include "voxlap5.h"
 
@@ -1270,7 +1271,7 @@ void setflash (float px, float py, float pz, int32_t flashradius, int32_t numang
 
 	for(i=0;i<numang;i++)
 	{
-		_asm emms
+		_mm_empty();
 
 		fcossin(((float)i+(float)angoff*.125f)*PI*2.0f/(float)numang,&vx,&vy);
 
@@ -1392,7 +1393,7 @@ fafterdelete:;
 fcontinue:;
 	}
 
-	_asm emms
+	_mm_empty();
 	updatebbox(vx5.minx,vx5.miny,vx5.minz,vx5.maxx,vx5.maxy,vx5.maxz,0);
 	return;
 
@@ -1512,53 +1513,20 @@ void estnorm (int32_t x, int32_t y, int32_t z, point3d *fp)
 					{ n.x += xx; n.y += yy; n.z += zz; }
 #endif
 
-#if 1
-	f = fsqrecip[n.x*n.x + n.y*n.y + n.z*n.z];
-	fp->x = ((float)n.x)*f; fp->y = ((float)n.y)*f; fp->z = ((float)n.z)*f;
-#else
-
-		//f = 1.0 / sqrt((double)(n.x*n.x + n.y*n.y + n.z*n.z));
-		//fp->x = f*(float)n.x; fp->y = f*(float)n.y; fp->z = f*(float)n.z;
-	zz = n.x*n.x + n.y*n.y + n.z*n.z;
-	if (cputype&(1<<25))
+	/* Normalise (n.x, n.y, n.z) and write to *fp. The original code
+	 * had this guarded by `#if 1 ... #else <SSE/3DNow inline asm>`
+	 * with the asm branches selected via cputype&(1<<25) runtime
+	 * dispatch. The `#if 1` table-lookup path was always the
+	 * production code; Stage 4.7 dropped the asm fallbacks (every
+	 * supported target now has SSE2 baseline; `fsqrecip[]` already
+	 * gives a fast inverse-square-root via lookup with adequate
+	 * precision for normal-shading use). */
 	{
-		_asm
-		{
-			cvtsi2ss xmm0, zz
-			rsqrtss xmm0, xmm0
-			;movss f, xmm0
-
-				;fp->x = f*(float)n.x; fp->y = f*(float)n.y; fp->z = f*(float)n.z;
-			cvtsi2ss xmm1, n.z
-			shufps xmm0, xmm0, 0
-			mov eax, fp
-			movlhps xmm1, xmm1
-			cvtpi2ps xmm1, n
-			mulps xmm0, xmm1
-			movlps [eax], xmm0
-			movhlps xmm0, xmm0
-			movss [eax+8], xmm0
-		}
+		float f = fsqrecip[n.x*n.x + n.y*n.y + n.z*n.z];
+		fp->x = ((float)n.x)*f;
+		fp->y = ((float)n.y)*f;
+		fp->z = ((float)n.z)*f;
 	}
-	else
-	{
-		_asm
-		{
-			pi2fd mm0, zz       ;mm0:     0          zz
-			pfrsqrt mm0, mm0    ;mm0: 1/sqrt(zz) 1/sqrt(zz)
-			pi2fd mm1, n.x      ;mm1:     0         n.x
-			pi2fd mm2, n.y      ;mm2:     0         n.y
-			punpckldq mm1, mm2  ;mm1:    n.y        n.x
-			pi2fd mm2, n.z      ;mm2:     0         n.z
-			pfmul mm1, mm0      ;mm1:n.y/sqrt(zz) n.x/sqrt(zz)
-			pfmul mm2, mm0      ;mm2:     0       n.z/sqrt(zz)
-			mov eax, fp
-			movq [eax], mm1
-			movd [eax+8], mm2
-			femms
-		}
-	}
-#endif
 }
 
 static int32_t vspan (int32_t x, int32_t y0, int32_t y1)
@@ -3118,7 +3086,7 @@ void opticast ()
 				while ((p1 < xres) && (u1 < j)) { u1 += ui; p1++; }
 				if (p0 < p1) hrend(p0,sy,p1,u,ui,i);
 			}
-			_asm emms
+			_mm_empty();
 		}
 	}
 
@@ -3157,7 +3125,7 @@ void opticast ()
 			if (giforzsgn < 0)
 				  { for(sy=p0;sy<p1;sy++) vrend(lastx[sy],sy,xres,lastx[sy],1); }
 			else { for(sy=p0;sy<p1;sy++) vrend(lastx[sy],sy,xres,-lastx[sy],-1); }
-			_asm emms
+			_mm_empty();
 		}
 	}
 
@@ -3192,7 +3160,7 @@ void opticast ()
 				while ((p1 < xres) && (u1 < j)) { u1 += ui; p1++; }
 				if (p0 < p1) hrend(p0,sy,p1,u,ui,i);
 			}
-			_asm emms
+			_mm_empty();
 		}
 	}
 
@@ -3229,7 +3197,7 @@ void opticast ()
 				while ((p1 < yres) && (u < j)) { u += ui; lastx[p1++] = sx; }
 			}
 			for(sy=p0;sy<p1;sy++) vrend(0,sy,lastx[sy]+1,0,giforzsgn);
-			_asm emms
+			_mm_empty();
 		}
 	}
 }
@@ -5650,7 +5618,7 @@ void genmipvxl (int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 		gmipnum--;
 	}
 
-	_asm emms
+	_mm_empty();
 
 #if 0 //TEMP HACK!!!
 	{
@@ -7754,7 +7722,7 @@ void drawtile (int32_t tf, int32_t tp, int32_t tx, int32_t ty, int32_t tcx, int3
 					pop ebx
 				}
 			}
-			_asm emms
+			_mm_empty();
 		}
 		else
 		{
@@ -7809,7 +7777,7 @@ enddtnhalf:    pop edi
 					pop ebx
 				}
 			}
-			_asm emms
+			_mm_empty();
 		}
 	}
 	else //Use alpha for masking
@@ -7886,7 +7854,7 @@ enddtnhalf:    pop edi
 				}
 			}
 		}
-		_asm emms
+		_mm_empty();
 	}
 }
 
@@ -8666,22 +8634,13 @@ typedef struct
 } equivectyp;
 static equivectyp equivec;
 
-#ifdef _MSC_VER
-
+/* Returns the low 32 bits of (a*d + s*t). The original was a 6-instruction
+ * MSVC inline asm using the implicit return-via-EAX convention; the C
+ * version emits the same imul + add pattern under /O2. */
 static _inline int32_t dmulshr0 (int32_t a, int32_t d, int32_t s, int32_t t)
 {
-	_asm
-	{
-		mov eax, a
-		imul d
-		mov ecx, eax
-		mov eax, s
-		imul t
-		add eax, ecx
-	}
+	return (int32_t)((uint32_t)((int64_t)a * d) + (uint32_t)((int64_t)s * t));
 }
-
-#endif
 
 __declspec(noinline) void equiind2vec (int32_t i, float *x, float *y, float *z)
 {
@@ -9857,7 +9816,7 @@ static void kv6draw (vx5sprite *spr)
 		}
 		if ((uint32_t)inx < (uint32_t)kv->xsiz)
 		{
-			if ((x < nxplanemin) || (x >= nxplanemax)) { { _asm emms } return; }
+			if ((x < nxplanemin) || (x >= nxplanemax)) { _mm_empty(); return; }
 			yv = xv-kv->xlen[x];
 			subps(r1,r1,&cadd4[1]);
 			addps(r0,r1,r2);
@@ -9881,7 +9840,7 @@ static void kv6draw (vx5sprite *spr)
 			}
 		}
 	}
-	_asm emms
+	_mm_empty();
 }
 
 static void kv6draw_noz(vx5sprite *spr)
@@ -10072,7 +10031,7 @@ static void kv6draw_noz(vx5sprite *spr)
 		}
 		if ((uint32_t)inx < (uint32_t)kv->xsiz)
 		{
-			if ((x < nxplanemin) || (x >= nxplanemax)) { { _asm emms } return; }
+			if ((x < nxplanemin) || (x >= nxplanemax)) { _mm_empty(); return; }
 			yv = xv - kv->xlen[x];
 			subps(r1, r1, &cadd4[1]);
 			addps(r0, r1, r2);
@@ -10096,7 +10055,7 @@ static void kv6draw_noz(vx5sprite *spr)
 			}
 		}
 	}
-	_asm emms
+	_mm_empty();
 }
 
 #endif
@@ -10790,28 +10749,15 @@ void setkv6 (vx5sprite *spr)
 
 #else
 
-#ifdef _MSC_VER
-
-	//dmulshr22 = ((a*b + c*d)>>22)
+/* dmulshr22 = ((a*b + c*d) >> 22), with the intermediate computed in
+ * full 64-bit so high-order overflow contributes to the shifted result.
+ * The original asm did imul + push/pop edx + add/adc to track the
+ * upper 32 bits, then shrd to fuse the 64-bit shift into eax. C does
+ * exactly that with int64_t. */
 static _inline int32_t dmulshr22 (int32_t a, int32_t b, int32_t c, int32_t d)
 {
-	_asm
-	{
-		mov eax, a
-		imul b
-		mov ecx, eax
-		push edx
-		mov eax, c
-		imul d
-		add eax, ecx
-		pop ecx
-		adc edx, ecx
-		shrd eax, edx, 22
-	}
+	return (int32_t)(((int64_t)a * b + (int64_t)c * d) >> 22);
 }
-
-
-#endif
 
 static kv6data *gfrezkv;
 static lpoint3d gfrezx, gfrezy, gfrezz, gfrezp;
