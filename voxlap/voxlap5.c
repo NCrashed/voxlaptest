@@ -13149,8 +13149,14 @@ afterdelete:
 	/* Pop current c entry. If still in active cfasm region, handle
 	 * next entry in the same column (skipixy). Otherwise step to the
 	 * next voxel column (ixy_sptr_col advances via gixy[lane]). */
+	c_presync = c;  /* shared with remiporend's skipixy2 route */
+afterdelete_kept_presync:
+	/* Stage 4.5b.8c entry from deletez: c_presync was set to old_ce
+	 * (the freed cfasm slot) so the post-column-step skip-sync test
+	 * (c_presync == c) fails — without that, locals stay at the
+	 * pre-deletez state but cf[c]'s memory now holds shifted-down
+	 * data, and the next column draws with stale cx0/cy0/cx1/cy1. */
 	{
-		c_presync = c;  /* shared with remiporend's skipixy2 route */
 		c--;
 		if (c >= &cf[128]) goto skipixy_with_presync;
 
@@ -13327,7 +13333,24 @@ deletez:
 	 * entered deletez while processing an interior entry), shift
 	 * entries at (c, old_ce] down by one slot so the popped slot gap
 	 * is closed. Otherwise (c == ce), no shift needed. Falls into
-	 * afterdelete to pop c itself. */
+	 * afterdelete to pop c itself.
+	 *
+	 * Stage 4.5b.8c: when the shift fires, cf[c]'s memory is now the
+	 * data that lived at cf[c+1] (= old_ce, the just-freed slot's
+	 * origin). LOCAL cx0/cy0/cx1/cy1/z0/z1 still reflect the pre-
+	 * deletez iteration we just finished. The post-column-step skip-
+	 * sync test (`c_presync == c`) would otherwise fire here — both
+	 * sides equal cf[c] — and locals would never get re-loaded from
+	 * the now-shifted cf[c] memory. The asm gets this right by
+	 * setting `ebx = old_ce` inside deletez (v5.asm:765-770), which
+	 * later makes `cmp ebx, esp` at skipixy2 unequal so the sync
+	 * runs. We mirror that by stashing c_presync = old_ce and
+	 * jumping past afterdelete's `c_presync = c` re-assignment.
+	 *
+	 * Found by H8b (Stage 4.5b.8b) trace-asm vs trace-scalar diff at
+	 * c=1276 in high_down: post-Kstep Lfw cx0=18f76ca0 (asm, sync'd
+	 * from cf[c]) vs cx0=0a30568c (scalar, stale from pre-deletez
+	 * LOWER slab). */
 	{
 		if (ce <= &cf[128]) goto retsub;
 		cftype *old_ce = ce;
@@ -13335,6 +13358,8 @@ deletez:
 		if (c < old_ce) {
 			cftype *p;
 			for (p = c; p < old_ce; p++) *p = *(p + 1);
+			c_presync = old_ce;
+			goto afterdelete_kept_presync;
 		}
 	}
 	goto afterdelete;
