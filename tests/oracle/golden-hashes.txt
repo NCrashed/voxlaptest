@@ -3,5 +3,5 @@ east  fd575e24449c9c53
 diag_down  41a470e50a57f65c
 high_down  13131fc5e975c483
 sprite_front  b7ab71e368e97def
-sprite_above  24dd7a8f42001332
-sprite_iso  0b0ac6413dae7dca
+sprite_above  7a91996c36a7cbfd
+sprite_iso  00c4f9d32502f23f

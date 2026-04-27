@@ -22,21 +22,6 @@ EXTRN _skyoff : dword   ;Memory offset to start of longitude line
 EXTRN _skyxsiz : dword  ;Size of longitude line
 EXTRN _skylat : dword   ;long[_skyxsiz] : latitude's unit dir. vector
 
-IFDEF VOXLAP_GROUSCAN_TRACE
-;Stage 4.5b.7h-l (H5/H6) + Stage 4.5b.8b (H8b): asm-side trace hook
-;globals + entry points. Defined in voxlap5.c under
-;#ifdef VOXLAP_GROUSCAN_TRACE.
-EXTRN _voxlap_asm_oldebp : dword
-EXTRN _voxlap_asm_savemm : qword
-EXTRN _voxlap_asm_save_cfasmesp : dword
-EXTRN _voxlap_trace_asm_kstep : NEAR
-EXTRN _voxlap_trace_asm_remip : NEAR
-EXTRN _voxlap_trace_asm_drawfwall : NEAR
-EXTRN _voxlap_trace_asm_drawcwall : NEAR
-EXTRN _voxlap_trace_asm_drawceil  : NEAR
-EXTRN _voxlap_trace_asm_drawflor  : NEAR
-ENDIF
-
 ;How to declare C-ASM shared variables in the ASM code:
 ;ASM:                    C:
 ;   PUBLIC _xr0             extern void *xr0;
@@ -233,54 +218,6 @@ skipngxmax0:
 	jmp drawceil
 
 drawfwall:
-IFDEF VOXLAP_GROUSCAN_TRACE
-	;H8b: Lfw entry trace hook. Same dance as the H5 Kstep hook
-	;(save MMX, emms, swap ESP cfasm→espbak, PUSHAD, push args, call,
-	;ADD ESP, POPAD, restore ESP, restore MMX). Captures ALL drawfwall
-	;input state for line-diff against scalar's matching VLT_RAW("Lfw …")
-	;at voxlap5.c drawfwall:.
-	movq qword ptr [_voxlap_asm_savemm + 0],  mm0
-	movq qword ptr [_voxlap_asm_savemm + 8],  mm1
-	movq qword ptr [_voxlap_asm_savemm + 16], mm2
-	movq qword ptr [_voxlap_asm_savemm + 24], mm3
-	movq qword ptr [_voxlap_asm_savemm + 32], mm4
-	movq qword ptr [_voxlap_asm_savemm + 40], mm5
-	movq qword ptr [_voxlap_asm_savemm + 48], mm6
-	movq qword ptr [_voxlap_asm_savemm + 56], mm7
-	emms
-
-	mov dword ptr [_voxlap_asm_save_cfasmesp], esp
-	mov esp, dword ptr espbak
-
-	pushad
-
-	push dword ptr _voxlap_asm_oldebp                ;arg 11: wall_lane
-	push dword ptr [_voxlap_asm_savemm + 40]         ;arg 10: mm5_tail (mm5.dword[0])
-	push dword ptr [_voxlap_asm_savemm + 52]         ;arg  9: gx  (mm6.dword[1])
-	push dword ptr [_voxlap_asm_savemm + 48]         ;arg  8: ogx (mm6.dword[0])
-	push dword ptr [_voxlap_asm_savemm + 12]         ;arg  7: cy1 (mm1.dword[1])
-	push dword ptr [_voxlap_asm_savemm + 8]          ;arg  6: cx1 (mm1.dword[0])
-	push dword ptr [_voxlap_asm_savemm + 4]          ;arg  5: cy0 (mm0.dword[1])
-	push dword ptr [_voxlap_asm_savemm + 0]          ;arg  4: cx0 (mm0.dword[0])
-	push edx                                         ;arg  3: z1
-	push ecx                                         ;arg  2: z0
-	push edi                                         ;arg  1: v
-	call _voxlap_trace_asm_drawfwall
-	add esp, 44                                      ;11 args * 4 bytes
-
-	popad
-
-	mov esp, dword ptr [_voxlap_asm_save_cfasmesp]
-
-	movq mm0, qword ptr [_voxlap_asm_savemm + 0]
-	movq mm1, qword ptr [_voxlap_asm_savemm + 8]
-	movq mm2, qword ptr [_voxlap_asm_savemm + 16]
-	movq mm3, qword ptr [_voxlap_asm_savemm + 24]
-	movq mm4, qword ptr [_voxlap_asm_savemm + 32]
-	movq mm5, qword ptr [_voxlap_asm_savemm + 40]
-	movq mm6, qword ptr [_voxlap_asm_savemm + 48]
-	movq mm7, qword ptr [_voxlap_asm_savemm + 56]
-ENDIF
 	movzx eax, byte ptr [edi+1]
 	cmp eax, edx
 	jge drawcwall
@@ -325,50 +262,6 @@ endloop1:
 	mov [esp+4+2048], ebx
 
 drawcwall:
-IFDEF VOXLAP_GROUSCAN_TRACE
-	;H8b: Lcw entry trace hook. Captures state BEFORE `mov edx, eax`
-	;(z1 := v[1]) so the logged z1 reflects the INCOMING value (post-
-	;loop0 decrement OR post-`jge drawcwall` early exit), matching
-	;scalar's VLT_RAW("Lcw …") emit point at voxlap5.c drawcwall:.
-	movq qword ptr [_voxlap_asm_savemm + 0],  mm0
-	movq qword ptr [_voxlap_asm_savemm + 8],  mm1
-	movq qword ptr [_voxlap_asm_savemm + 16], mm2
-	movq qword ptr [_voxlap_asm_savemm + 24], mm3
-	movq qword ptr [_voxlap_asm_savemm + 32], mm4
-	movq qword ptr [_voxlap_asm_savemm + 40], mm5
-	movq qword ptr [_voxlap_asm_savemm + 48], mm6
-	movq qword ptr [_voxlap_asm_savemm + 56], mm7
-	emms
-
-	mov dword ptr [_voxlap_asm_save_cfasmesp], esp
-	mov esp, dword ptr espbak
-
-	pushad
-
-	push dword ptr [_voxlap_asm_savemm + 48]         ;arg 8: ogx (mm6.dword[0])
-	push dword ptr [_voxlap_asm_savemm + 12]         ;arg 7: cy1
-	push dword ptr [_voxlap_asm_savemm + 8]          ;arg 6: cx1
-	push dword ptr [_voxlap_asm_savemm + 4]          ;arg 5: cy0
-	push dword ptr [_voxlap_asm_savemm + 0]          ;arg 4: cx0
-	push edx                                         ;arg 3: z1
-	push ecx                                         ;arg 2: z0
-	push edi                                         ;arg 1: v
-	call _voxlap_trace_asm_drawcwall
-	add esp, 32                                      ;8 args * 4 bytes
-
-	popad
-
-	mov esp, dword ptr [_voxlap_asm_save_cfasmesp]
-
-	movq mm0, qword ptr [_voxlap_asm_savemm + 0]
-	movq mm1, qword ptr [_voxlap_asm_savemm + 8]
-	movq mm2, qword ptr [_voxlap_asm_savemm + 16]
-	movq mm3, qword ptr [_voxlap_asm_savemm + 24]
-	movq mm4, qword ptr [_voxlap_asm_savemm + 32]
-	movq mm5, qword ptr [_voxlap_asm_savemm + 40]
-	movq mm6, qword ptr [_voxlap_asm_savemm + 48]
-	movq mm7, qword ptr [_voxlap_asm_savemm + 56]
-ENDIF
 	cmp edi, [esi]
 	mov edx, eax
 	je predrawflor
@@ -420,52 +313,6 @@ predrawceil:
 	mov ecx, eax
 	pshufw mm6, mm6, 04eh       ;swap hi & lo of mm6
 drawceil: ;if (dmulrethigh(gylookup[ecx*4],c->cx0,c->cy0,gx) < 0) jmp drawflor
-IFDEF VOXLAP_GROUSCAN_TRACE
-	;H8b: Lce entry trace hook. mm6 has already been swapped at
-	;predrawceil (or never swapped on the column-top `jmp drawceil`
-	;path) — so .dword[0] = ogx and .dword[1] = gx in scalar's naming
-	;at this point. Matches scalar's VLT_RAW("Lce …") at voxlap5.c
-	;drawceil:.
-	movq qword ptr [_voxlap_asm_savemm + 0],  mm0
-	movq qword ptr [_voxlap_asm_savemm + 8],  mm1
-	movq qword ptr [_voxlap_asm_savemm + 16], mm2
-	movq qword ptr [_voxlap_asm_savemm + 24], mm3
-	movq qword ptr [_voxlap_asm_savemm + 32], mm4
-	movq qword ptr [_voxlap_asm_savemm + 40], mm5
-	movq qword ptr [_voxlap_asm_savemm + 48], mm6
-	movq qword ptr [_voxlap_asm_savemm + 56], mm7
-	emms
-
-	mov dword ptr [_voxlap_asm_save_cfasmesp], esp
-	mov esp, dword ptr espbak
-
-	pushad
-
-	push dword ptr [_voxlap_asm_savemm + 40]         ;arg 9: mm5_tail
-	push dword ptr [_voxlap_asm_savemm + 52]         ;arg 8: gx  (mm6.dword[1])
-	push dword ptr [_voxlap_asm_savemm + 48]         ;arg 7: ogx (mm6.dword[0])
-	push dword ptr [_voxlap_asm_savemm + 12]         ;arg 6: cy1
-	push dword ptr [_voxlap_asm_savemm + 8]          ;arg 5: cx1
-	push dword ptr [_voxlap_asm_savemm + 4]          ;arg 4: cy0
-	push dword ptr [_voxlap_asm_savemm + 0]          ;arg 3: cx0
-	push edx                                         ;arg 2: z1
-	push ecx                                         ;arg 1: z0
-	call _voxlap_trace_asm_drawceil
-	add esp, 36                                      ;9 args * 4 bytes
-
-	popad
-
-	mov esp, dword ptr [_voxlap_asm_save_cfasmesp]
-
-	movq mm0, qword ptr [_voxlap_asm_savemm + 0]
-	movq mm1, qword ptr [_voxlap_asm_savemm + 8]
-	movq mm2, qword ptr [_voxlap_asm_savemm + 16]
-	movq mm3, qword ptr [_voxlap_asm_savemm + 24]
-	movq mm4, qword ptr [_voxlap_asm_savemm + 32]
-	movq mm5, qword ptr [_voxlap_asm_savemm + 40]
-	movq mm6, qword ptr [_voxlap_asm_savemm + 48]
-	movq mm7, qword ptr [_voxlap_asm_savemm + 56]
-ENDIF
 	mov eax, gylookoff
 	movd mm3, dword ptr [eax+ecx*4] ;mm3: [ 0   0   0  -gy]
 	por mm3, mm6               ;mm3: [ogx  0   gx -gy]
@@ -500,51 +347,6 @@ endif
 predrawflor:
 	pshufw mm6, mm6, 04eh       ;swap hi & lo of mm6
 drawflor: ;if (dmulrethigh(gylookup[edx*4],c->cx1,c->cy1,gx) >= 0) jmp enddrawflor
-IFDEF VOXLAP_GROUSCAN_TRACE
-	;H8b: Lfl entry trace hook. Same shape as Lce; mm6 has already
-	;been swapped at predrawflor (or never on the column-top `je
-	;drawflor` path or the inline `jg drawflor` from drawceilloop).
-	;Matches scalar's VLT_RAW("Lfl …") at voxlap5.c drawflor:.
-	movq qword ptr [_voxlap_asm_savemm + 0],  mm0
-	movq qword ptr [_voxlap_asm_savemm + 8],  mm1
-	movq qword ptr [_voxlap_asm_savemm + 16], mm2
-	movq qword ptr [_voxlap_asm_savemm + 24], mm3
-	movq qword ptr [_voxlap_asm_savemm + 32], mm4
-	movq qword ptr [_voxlap_asm_savemm + 40], mm5
-	movq qword ptr [_voxlap_asm_savemm + 48], mm6
-	movq qword ptr [_voxlap_asm_savemm + 56], mm7
-	emms
-
-	mov dword ptr [_voxlap_asm_save_cfasmesp], esp
-	mov esp, dword ptr espbak
-
-	pushad
-
-	push dword ptr [_voxlap_asm_savemm + 40]         ;arg 9: mm5_tail
-	push dword ptr [_voxlap_asm_savemm + 52]         ;arg 8: gx  (mm6.dword[1])
-	push dword ptr [_voxlap_asm_savemm + 48]         ;arg 7: ogx (mm6.dword[0])
-	push dword ptr [_voxlap_asm_savemm + 12]         ;arg 6: cy1
-	push dword ptr [_voxlap_asm_savemm + 8]          ;arg 5: cx1
-	push dword ptr [_voxlap_asm_savemm + 4]          ;arg 4: cy0
-	push dword ptr [_voxlap_asm_savemm + 0]          ;arg 3: cx0
-	push edx                                         ;arg 2: z1
-	push ecx                                         ;arg 1: z0
-	call _voxlap_trace_asm_drawflor
-	add esp, 36                                      ;9 args * 4 bytes
-
-	popad
-
-	mov esp, dword ptr [_voxlap_asm_save_cfasmesp]
-
-	movq mm0, qword ptr [_voxlap_asm_savemm + 0]
-	movq mm1, qword ptr [_voxlap_asm_savemm + 8]
-	movq mm2, qword ptr [_voxlap_asm_savemm + 16]
-	movq mm3, qword ptr [_voxlap_asm_savemm + 24]
-	movq mm4, qword ptr [_voxlap_asm_savemm + 32]
-	movq mm5, qword ptr [_voxlap_asm_savemm + 40]
-	movq mm6, qword ptr [_voxlap_asm_savemm + 48]
-	movq mm7, qword ptr [_voxlap_asm_savemm + 56]
-ENDIF
 	mov eax, gylookoff
 	movd mm3, dword ptr [eax+edx*4] ;mm3: [ 0   0   0  -gy]
 	por mm3, mm6               ;mm3: [ogx  0   gx -gy]
@@ -583,11 +385,6 @@ afterdelete:
 	cmp esp, offset _cfasm[2048]
 	jae skipixy
 
-IFDEF VOXLAP_GROUSCAN_TRACE
-	;Capture OLD ebp (= wall_lane) BEFORE the column step recomputes it.
-	mov dword ptr _voxlap_asm_oldebp, ebp
-ENDIF
-
 	movq mm4, qword ptr _gcsub[ebp*8]
 	add esi, _gixy[ebp*4]
 	mov ebp, _gpz[4]
@@ -603,61 +400,6 @@ ENDIF
 	add eax, _gdz[ebp*4]
 	mov _gpz[ebp*4], eax
 	mov esp, ce
-
-IFDEF VOXLAP_GROUSCAN_TRACE
-	;Stage 4.5b.7h (H5): trace hook. The grouscanasm prologue (line
-	;~187) saves real ESP to espbak then sets ESP to point into the
-	;_cfasm linked-list buffer (it acts as the `c` C-pointer for the
-	;rest of the function). Calling C from this state would push the
-	;C frame onto _cfasm[0..2047] (the "stack space" region) and
-	;fprintf's deep call chain quickly overflows into adjacent
-	;memory — first run got STATUS_ACCESS_VIOLATION (0xC0000005).
-	;Switch ESP to the real OS stack (espbak) before pushing args,
-	;switch back after POPAD. PUSHAD/POPAD around the call also
-	;preserves EAX/ECX/EDX (cdecl caller-saved); the asm uses ECX as
-	;z0 and EDX as z1 across iterations, so we can't let C clobber
-	;them.
-	movq qword ptr [_voxlap_asm_savemm + 0],  mm0
-	movq qword ptr [_voxlap_asm_savemm + 8],  mm1
-	movq qword ptr [_voxlap_asm_savemm + 16], mm2
-	movq qword ptr [_voxlap_asm_savemm + 24], mm3
-	movq qword ptr [_voxlap_asm_savemm + 32], mm4
-	movq qword ptr [_voxlap_asm_savemm + 40], mm5
-	movq qword ptr [_voxlap_asm_savemm + 48], mm6
-	movq qword ptr [_voxlap_asm_savemm + 56], mm7
-	emms
-
-	;Switch ESP from the cfasm-pointer to the real OS stack saved
-	;at function entry. After the call, restore the cfasm-ESP.
-	mov dword ptr [_voxlap_asm_save_cfasmesp], esp
-	mov esp, dword ptr espbak
-
-	pushad                                            ;save all GPRs
-
-	push edi                                          ;arg 7: v
-	push dword ptr _gpz[4]                            ;arg 6: gpz1
-	push dword ptr _gpz[0]                            ;arg 5: gpz0
-	push dword ptr [_voxlap_asm_savemm + 52]          ;arg 4: gx (mm6.dword[1])
-	push dword ptr [_voxlap_asm_savemm + 48]          ;arg 3: ogx (mm6.dword[0])
-	push ebp                                          ;arg 2: lane (NEW)
-	push dword ptr _voxlap_asm_oldebp                 ;arg 1: wlane (OLD)
-	call _voxlap_trace_asm_kstep
-	add esp, 28                                       ;7 args * 4 bytes
-
-	popad                                             ;restore all GPRs
-
-	;Restore the cfasm-style ESP for the asm's continued use.
-	mov esp, dword ptr [_voxlap_asm_save_cfasmesp]
-
-	movq mm0, qword ptr [_voxlap_asm_savemm + 0]
-	movq mm1, qword ptr [_voxlap_asm_savemm + 8]
-	movq mm2, qword ptr [_voxlap_asm_savemm + 16]
-	movq mm3, qword ptr [_voxlap_asm_savemm + 24]
-	movq mm4, qword ptr [_voxlap_asm_savemm + 32]
-	movq mm5, qword ptr [_voxlap_asm_savemm + 40]
-	movq mm6, qword ptr [_voxlap_asm_savemm + 48]
-	movq mm7, qword ptr [_voxlap_asm_savemm + 56]
-ENDIF
 
 	jmp skipixy2
 
@@ -868,7 +610,7 @@ startremip0:
 
 	mov eax, ngxmax
 	cmp eax, _gxmax
-	jae startsky          ;Stage 4.5b.7l: near jump — H6 hook below grew the distance past 127 bytes.
+	jae short startsky
 	add eax, eax
 	jo skipngxmax1 ;Make sure it doesn't overflow to negative!
 	cmp eax, _gxmax
@@ -894,51 +636,6 @@ skipngxmax2:
 	mov edi, [esi]
 
 	mov esp, ce
-
-IFDEF VOXLAP_GROUSCAN_TRACE
-	;H6 (Stage 4.5b.7l): post-mip-transition trace hook. Same dance
-	;as the Kstep hook — save MMX, switch ESP to espbak (real OS
-	;stack), PUSHAD/POPAD around the cdecl call. State captured from
-	;globals (gmipcnt, gpz, gdz, ngxmax) so it reflects the final
-	;values after this remiporend run.
-	movq qword ptr [_voxlap_asm_savemm + 0],  mm0
-	movq qword ptr [_voxlap_asm_savemm + 8],  mm1
-	movq qword ptr [_voxlap_asm_savemm + 16], mm2
-	movq qword ptr [_voxlap_asm_savemm + 24], mm3
-	movq qword ptr [_voxlap_asm_savemm + 32], mm4
-	movq qword ptr [_voxlap_asm_savemm + 40], mm5
-	movq qword ptr [_voxlap_asm_savemm + 48], mm6
-	movq qword ptr [_voxlap_asm_savemm + 56], mm7
-	emms
-
-	mov dword ptr [_voxlap_asm_save_cfasmesp], esp
-	mov esp, dword ptr espbak
-
-	pushad
-
-	push dword ptr ngxmax                       ;arg 6: ngxmax
-	push dword ptr _gdz[4]                       ;arg 5: gdz1
-	push dword ptr _gdz[0]                       ;arg 4: gdz0
-	push dword ptr _gpz[4]                       ;arg 3: gpz1
-	push dword ptr _gpz[0]                       ;arg 2: gpz0
-	movzx eax, byte ptr gmipcnt
-	push eax                                    ;arg 1: gmipcnt (zero-extended)
-	call _voxlap_trace_asm_remip
-	add esp, 24                                 ;6 args * 4 bytes
-
-	popad
-
-	mov esp, dword ptr [_voxlap_asm_save_cfasmesp]
-
-	movq mm0, qword ptr [_voxlap_asm_savemm + 0]
-	movq mm1, qword ptr [_voxlap_asm_savemm + 8]
-	movq mm2, qword ptr [_voxlap_asm_savemm + 16]
-	movq mm3, qword ptr [_voxlap_asm_savemm + 24]
-	movq mm4, qword ptr [_voxlap_asm_savemm + 32]
-	movq mm5, qword ptr [_voxlap_asm_savemm + 40]
-	movq mm6, qword ptr [_voxlap_asm_savemm + 48]
-	movq mm7, qword ptr [_voxlap_asm_savemm + 56]
-ENDIF
 
 	jmp skipixy2
 

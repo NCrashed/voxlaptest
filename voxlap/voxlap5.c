@@ -12,9 +12,6 @@
 #define PREC (256*4096)
 #define CMPPREC (256*4096)
 #define FPREC (256*4096)
-#ifndef USEV5ASM
-#define USEV5ASM 1
-#endif
 #define SCISDIST 1.0
 #define GOLDRAT 0.3819660112501052 //Golden Ratio: 1 - 1/((sqrt(5)+1)/2)
 #define ESTNORMRAD 2 //Specially optimized for 2: DON'T CHANGE unless testing!
@@ -118,7 +115,6 @@ typedef struct { int32_t x, y; } lpoint2d;
 typedef struct { float x, y; } point2d;
 #pragma pack(pop)
 
-#if USEV5ASM
 #ifndef __cplusplus
 	extern void *cfasm;
 	extern castdat skycast;
@@ -127,9 +123,6 @@ typedef struct { float x, y; } point2d;
 	extern "C" castdat skycast;
 #endif
 	#define cf ((cftype *)&cfasm)
-#else
-	cftype cf[256];
-#endif
 
 	//Screen related variables:
 static int32_t xres, yres, bytesperline, frameplace, xres4;
@@ -229,209 +222,6 @@ static void grouscanasm_scalar (intptr_t vptr);
 int32_t zbufoff;
 #endif
 #ifdef __cplusplus
-}
-#endif
-
-/* --- Per-pixel grouscan trace harness (Stage 4.5b.7b) ---
- * Compiled in via -DVOXLAP_GROUSCAN_TRACE. Both grouscanasm_scalar
- * (when VOXLAP_SCALAR_GROUSCAN=ON) and the C-fallback gline (when
- * USEV5ASM=0) emit matching trace records, so a per-line diff of the
- * two logs localizes the first behavioural divergence.
- *
- * Record format (one event per line):
- *   "[c=N] L<phase> <state>"            -- state at a label transition
- *   "[c=N] W<phase> slot=K col=ARGB"    -- per-pixel write
- *   "[c=N] X<phase> test=T"             -- test value at a loop's exit
- *   "[c=N] K<event> <details>"          -- column-step / split / mip
- *
- * `c=N` is the per-call counter (incremented at gline entry).
- * `slot=K` is the castdat offset from gscanptr at call entry — same
- * across both implementations for the same scan, so directly diffable.
- * `<phase>` is one of: fw fwall, cw cwall, ce ceil, fl flor.
- *
- * Without the compile flag the macros expand to no-ops and the public
- * voxlap_trace_open/close are stubs that just discard arguments. */
-#ifdef VOXLAP_GROUSCAN_TRACE
-static FILE   *vlt_fp    = NULL;
-static int32_t vlt_scene = -1;
-static int32_t vlt_call  = 0;
-static int32_t vlt_n     = 0;
-static int32_t vlt_max   = 5000000;    /* ~750 MB worst-case; CI artifact upload caps at 2 GB */
-static castdat *vlt_base = NULL;       /* gscanptr at gline entry */
-/* VLT_OK gates EVERYTHING — including the per-call counter increment.
- * That keeps non-traced scenes (north/east/etc.) free of any side
- * effect from the trace harness and avoids any chance of touching the
- * fp / counters when they're stale. */
-#define VLT_OK() (vlt_fp != NULL && vlt_n < vlt_max)
-#define VLT_RAW(...) do { \
-    if (VLT_OK()) { \
-        fprintf(vlt_fp, "[c=%d] ", vlt_call); \
-        fprintf(vlt_fp, __VA_ARGS__); \
-        fputc('\n', vlt_fp); \
-        vlt_n++; \
-    } \
-} while (0)
-#define VLT_W(phase, slot_ptr, col_val) do { \
-    if (VLT_OK()) { \
-        long _s = (long)((castdat *)(slot_ptr) - vlt_base); \
-        fprintf(vlt_fp, "[c=%d] W%s slot=%ld col=%08x\n", \
-            vlt_call, (phase), _s, (unsigned)(col_val)); \
-        vlt_n++; \
-    } \
-} while (0)
-#else
-#define VLT_OK()      0
-#define VLT_RAW(...)  ((void)0)
-#define VLT_W(...)    ((void)0)
-#endif
-
-VOXLAP_API void voxlap_trace_open (const char *path, int32_t scene_idx) {
-#ifdef VOXLAP_GROUSCAN_TRACE
-    if (vlt_fp) { fclose(vlt_fp); vlt_fp = NULL; }
-    vlt_scene = scene_idx;
-    vlt_call  = 0;
-    vlt_n     = 0;
-    vlt_base  = NULL;
-    if (path) {
-        vlt_fp = fopen(path, "w");
-        if (!vlt_fp) {
-            fprintf(stderr, "voxlap_trace_open: fopen(%s) failed\n", path);
-            return;
-        }
-        fprintf(vlt_fp, "# voxlap grouscan trace, scene=%d\n", scene_idx);
-    }
-#else
-    (void)path; (void)scene_idx;
-#endif
-}
-
-VOXLAP_API void voxlap_trace_close (void) {
-#ifdef VOXLAP_GROUSCAN_TRACE
-    if (vlt_fp) {
-        fprintf(vlt_fp, "# events=%d (max=%d, %s)\n",
-            vlt_n, vlt_max, vlt_n < vlt_max ? "complete" : "TRUNCATED");
-        fclose(vlt_fp); vlt_fp = NULL;
-    }
-#endif
-}
-
-#ifdef VOXLAP_GROUSCAN_TRACE
-/* --- Stage 4.5b.7h (H5): asm-side trace hook ---
- * v5.asm calls voxlap_trace_asm_kstep from its column-step path
- * (afterdelete column-step section, after gpz[NEW]+=gdz advance).
- * The asm hook saves/restores all MMX state across the call so we
- * don't disturb its in-flight register file. Both globals below
- * are referenced from v5.asm via EXTRN; do NOT make them static. */
-int32_t  voxlap_asm_oldebp;
-int64_t  voxlap_asm_savemm[8];
-/* v5.asm uses ESP as a pointer into the cfasm linked-list buffer
- * during grouscanasm — not as the real OS stack — so calling C
- * with that ESP would push into _cfasm and overflow fprintf's
- * deep frame into adjacent memory. The hook saves cfasm-ESP here,
- * switches ESP to espbak (real OS stack saved at function entry),
- * calls the C function, then restores. */
-int32_t  voxlap_asm_save_cfasmesp;
-
-void voxlap_trace_asm_kstep (int32_t wlane, int32_t lane,
-                              int32_t ogx, int32_t gx,
-                              int32_t gpz0, int32_t gpz1,
-                              void *v) {
-    if (vlt_fp) {
-        VLT_RAW("Kstep wlane=%d lane=%d ogx=%08x gx=%08x gpz0=%08x gpz1=%08x v=%p",
-                wlane, lane, (unsigned)ogx, (unsigned)gx,
-                (unsigned)gpz0, (unsigned)gpz1, v);
-    }
-}
-
-/* H6: remiporend exit hook. Logs the post-mip-transition state so we
- * can compare asm vs scalar after each remiporend run. Bail paths
- * (goto startsky from gmipcnt or ngxmax checks) are observable by
- * absence of subsequent Ksteps in the call. */
-void voxlap_trace_asm_remip (int32_t gmipcnt,
-                              int32_t gpz0, int32_t gpz1,
-                              int32_t gdz0, int32_t gdz1,
-                              int32_t ngxmax) {
-    if (vlt_fp) {
-        VLT_RAW("Kremip gmipcnt=%d gpz0=%08x gpz1=%08x gdz0=%08x gdz1=%08x ngxmax=%08x",
-                gmipcnt, (unsigned)gpz0, (unsigned)gpz1,
-                (unsigned)gdz0, (unsigned)gdz1, (unsigned)ngxmax);
-    }
-}
-
-/* H8b: drawing-label entry trace hooks. Called from v5.asm just after
- * each of the 4 drawing labels (drawfwall / drawcwall / drawceil /
- * drawflor) but BEFORE any in-label state mutation. Field set is
- * chosen to match scalar's existing Lfw/Lcw/Lce/Lfl events one-for-one
- * so a line-diff between trace-asm and trace-scalar logs locates
- * exactly which label is entered with mismatched state at the first
- * divergence (focus: c=1276..1296, the split-region where H5 found
- * 283 extra Ksteps in asm vs scalar). The hook protocol mirrors the
- * H5 Kstep hook (save MM0..MM7, emms, swap ESP cfasm→espbak, PUSHAD,
- * push args, call, ADD ESP, POPAD, restore ESP, restore MMX). */
-void voxlap_trace_asm_drawfwall (
-    void *v,
-    int32_t z0, int32_t z1,
-    int32_t cx0, int32_t cy0,
-    int32_t cx1, int32_t cy1,
-    int32_t ogx, int32_t gx,
-    int32_t mm5_tail,
-    int32_t wall_lane)
-{
-    if (vlt_fp) {
-        const unsigned char *vb = (const unsigned char *)v;
-        VLT_RAW("Lfw v=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d z0=%d z1=%d "
-                "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x wlane=%d "
-                "gi0=%08x gi1=%08x",
-                v, vb[0], vb[1], vb[2], vb[3], z0, z1,
-                (unsigned)cx0, (unsigned)cy0, (unsigned)cx1, (unsigned)cy1,
-                (unsigned)ogx, (unsigned)gx, (unsigned)mm5_tail, wall_lane,
-                (unsigned)((int32_t *)&gi)[0], (unsigned)((int32_t *)&gi)[1]);
-    }
-}
-
-void voxlap_trace_asm_drawcwall (
-    void *v,
-    int32_t z0, int32_t z1,
-    int32_t cx0, int32_t cy0,
-    int32_t cx1, int32_t cy1,
-    int32_t ogx)
-{
-    if (vlt_fp) {
-        const unsigned char *vb = (const unsigned char *)v;
-        VLT_RAW("Lcw v=%p v[1]=%d v[3]=%d z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x",
-                v, vb[1], vb[3], z0, z1,
-                (unsigned)cx0, (unsigned)cy0, (unsigned)cx1, (unsigned)cy1, (unsigned)ogx);
-    }
-}
-
-void voxlap_trace_asm_drawceil (
-    int32_t z0, int32_t z1,
-    int32_t cx0, int32_t cy0,
-    int32_t cx1, int32_t cy1,
-    int32_t ogx, int32_t gx,
-    int32_t mm5_tail)
-{
-    if (vlt_fp) {
-        VLT_RAW("Lce z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x",
-                z0, z1,
-                (unsigned)cx0, (unsigned)cy0, (unsigned)cx1, (unsigned)cy1,
-                (unsigned)ogx, (unsigned)gx, (unsigned)mm5_tail);
-    }
-}
-
-void voxlap_trace_asm_drawflor (
-    int32_t z0, int32_t z1,
-    int32_t cx0, int32_t cy0,
-    int32_t cx1, int32_t cy1,
-    int32_t ogx, int32_t gx,
-    int32_t mm5_tail)
-{
-    if (vlt_fp) {
-        VLT_RAW("Lfl z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x",
-                z0, z1,
-                (unsigned)cx0, (unsigned)cy0, (unsigned)cx1, (unsigned)cy1,
-                (unsigned)ogx, (unsigned)gx, (unsigned)mm5_tail);
-    }
 }
 #endif
 
@@ -1288,11 +1078,6 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 	float f, f1, f2, vd0, vd1, vz0, vx1, vy1, vz1;
 	int32_t j;
 	cftype *c;
-#if (USEV5ASM == 0)
-	int32_t gx, ogx, gy, ixy, col, dax, day;
-	cftype *c2, *ce;
-	char *v;
-#endif
 
 	vd0 = x0*gistr.x + y0*gihei.x + gcorn[0].x;
 	vd1 = x0*gistr.y + y0*gihei.y + gcorn[0].y;
@@ -1349,7 +1134,7 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 #endif
 
 		//Clip borders safely (MUST use integers!) - don't wrap around
-#if ((USEZBUFFER == 1) && (USEV5ASM != 0))
+#if (USEZBUFFER == 1)
 	skycast.dist = gxmax;
 #endif
 	if (gixy[0] < 0) j = glipos.x; else j = VSID-1-glipos.x;
@@ -1357,7 +1142,7 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 	if (q < (uint64_t)gxmax)
 	{
 		gxmax = (int32_t)q;
-#if ((USEZBUFFER == 1) && (USEV5ASM != 0))
+#if (USEZBUFFER == 1)
 		skycast.dist = 0x7fffffff;
 #endif
 	}
@@ -1366,7 +1151,7 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 	if (q < (uint64_t)gxmax)
 	{
 		gxmax = (int32_t)q;
-#if ((USEZBUFFER == 1) && (USEV5ASM != 0))
+#if (USEZBUFFER == 1)
 		skycast.dist = 0x7fffffff;
 #endif
 	}
@@ -1377,19 +1162,6 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 		gcsub[1] = gcsub[(((uint32_t)gixy[1])>>31)+6];
 	}
 
-#ifdef VOXLAP_GROUSCAN_TRACE
-	if (vlt_fp) {
-		vlt_call++;
-		vlt_base = gscanptr;
-		VLT_RAW("E leng=%d v=%p z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x "
-		        "gpz0=%08x gpz1=%08x gdz0=%08x gdz1=%08x gxmax=%08x gi0=%08x gi1=%08x",
-		        leng, (void *)gstartv, gstartz0, gstartz1,
-		        c->cx0, c->cy0, c->cx1, c->cy1,
-		        gpz[0], gpz[1], gdz[0], gdz[1], gxmax, gi0, gi1);
-	}
-#endif
-
-#if USEV5ASM
 	if (nskypic)
 	{
 		if (skycurlng < 0)
@@ -1412,166 +1184,10 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 		skyoff = skycurlng*skybpl + nskypic;
 	}
 
-	//resp = 0;
 #ifdef VOXLAP_SCALAR_GROUSCAN
 	grouscanasm_scalar((intptr_t)gstartv);
 #else
 	grouscanasm((intptr_t)gstartv);
-#endif
-	//if (resp)
-	//{
-	//   static char tempbuf[2048], tempbuf2[256];
-	//   sprintf(tempbuf,"eax:%08x\tmm0:%08x%08x\nebx:%08x\tmm1:%08x%08x\necx:%08x\tmm2:%08x%08x\nedx:%08x\tmm3:%08x%08x\nesi:%08x\tmm4:%08x%08x\nedi:%08x\tmm5:%08x%08x\nebp:%08x\tmm6:%08x%08x\nesp:%08x\tmm7:%08x%08x\n",
-	//      reax,remm[ 1],remm[ 0], rebx,remm[ 3],remm[ 2],
-	//      recx,remm[ 5],remm[ 4], redx,remm[ 7],remm[ 6],
-	//      resi,remm[ 9],remm[ 8], redi,remm[11],remm[10],
-	//      rebp,remm[13],remm[12], resp,remm[15],remm[14]);
-	//
-	//   for(j=0;j<3;j++)
-	//   {
-	//      sprintf(tempbuf2,"%d i0:%d i1:%d z0:%ld z1:%ld cx0:%08x cy0:%08x cx1:%08x cy1:%08x\n",
-	//         j,(int32_t)cf[j].i0-(int32_t)gscanptr,(int32_t)cf[j].i1-(int32_t)gscanptr,cf[j].z0,cf[j].z1,cf[j].cx0,cf[j].cy0,cf[j].cx1,cf[j].cy1);
-	//      strcat(tempbuf,tempbuf2);
-	//   }
-	//   evilquit(tempbuf);
-	//}
-#else
-//------------------------------------------------------------------------
-	ce = c; v = gstartv;
-	j = (((uint32_t)(gpz[1]-gpz[0]))>>31);
-	gx = gpz[j];
-	ixy = gpixy;
-	if (v == (char *)*(int32_t *)gpixy) goto drawflor; goto drawceil;
-
-	while (1)
-	{
-
-drawfwall:;
-		VLT_RAW("Lfw v=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d z0=%d z1=%d "
-		        "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x gi0=%08x gi1=%08x",
-		        (void *)v,
-		        (int)(unsigned char)v[0], (int)(unsigned char)v[1],
-		        (int)(unsigned char)v[2], (int)(unsigned char)v[3],
-		        c->z0, c->z1,
-		        c->cx0, c->cy0, c->cx1, c->cy1, ogx, gx, gi0, gi1);
-		if (v[1] != c->z1)
-		{
-			if (v[1] > c->z1) c->z1 = v[1];
-			else { do
-			{
-				int32_t _t;
-				c->z1--; col = *(int32_t *)&v[(c->z1-v[1])*4+4];
-				while ((_t = dmulrethigh(gylookup[c->z1],c->cx1,c->cy1,ogx)) < 0)
-				{
-					VLT_W("fw", c->i1, col);
-					c->i1->col = col; c->i1--; if (c->i0 > c->i1) goto deletez;
-					c->cx1 -= gi0; c->cy1 -= gi1;
-				}
-				VLT_RAW("Xfw test=%d", _t);
-			} while (v[1] != c->z1); }
-		}
-
-		if (v == (char *)*(int32_t *)ixy) goto drawflor;
-
-//drawcwall:;
-		VLT_RAW("Lcw z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x",
-		        c->z0, c->z1, c->cx0, c->cy0, c->cx1, c->cy1, ogx);
-		if (v[3] != c->z0)
-		{
-			if (v[3] < c->z0) c->z0 = v[3];
-			else { do
-			{
-				int32_t _t;
-				c->z0++; col = *(int32_t *)&v[(c->z0-v[3])*4-4];
-				while ((_t = dmulrethigh(gylookup[c->z0],c->cx0,c->cy0,ogx)) >= 0)
-				{
-					VLT_W("cw", c->i0, col);
-					c->i0->col = col; c->i0++; if (c->i0 > c->i1) goto deletez;
-					c->cx0 += gi0; c->cy0 += gi1;
-				}
-				VLT_RAW("Xcw test=%d", _t);
-			} while (v[3] != c->z0); }
-		}
-
-drawceil:;
-		VLT_RAW("Lce z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x gx=%08x",
-		        c->z0, c->z1, c->cx0, c->cy0, c->cx1, c->cy1, gx);
-		{
-			int32_t _t;
-			while ((_t = dmulrethigh(gylookup[c->z0],c->cx0,c->cy0,gx)) >= 0)
-			{
-				VLT_W("ce", c->i0, *(int32_t *)&v[-4]);
-				c->i0->col = (*(int32_t *)&v[-4]); c->i0++; if (c->i0 > c->i1) goto deletez;
-				c->cx0 += gi0; c->cy0 += gi1;
-			}
-			VLT_RAW("Xce test=%d", _t);
-		}
-
-drawflor:;
-		VLT_RAW("Lfl z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x gx=%08x",
-		        c->z0, c->z1, c->cx0, c->cy0, c->cx1, c->cy1, gx);
-		{
-			int32_t _t;
-			while ((_t = dmulrethigh(gylookup[c->z1],c->cx1,c->cy1,gx)) < 0)
-			{
-				VLT_W("fl", c->i1, *(int32_t *)&v[4]);
-				c->i1->col = *(int32_t *)&v[4]; c->i1--; if (c->i0 > c->i1) goto deletez;
-				c->cx1 -= gi0; c->cy1 -= gi1;
-			}
-			VLT_RAW("Xfl test=%d", _t);
-		}
-
-afterdelete:;
-		c--;
-		if (c < &cf[128])
-		{
-			ixy += gixy[j];
-			gpz[j] += gdz[j];
-			j = (((uint32_t)(gpz[1]-gpz[0]))>>31);
-			ogx = gx; gx = gpz[j];
-			VLT_RAW("Kstep ixy=%08x j=%d ogx=%08x gx=%08x gpz0=%08x gpz1=%08x",
-			        ixy, j, ogx, gx, gpz[0], gpz[1]);
-
-			if (gx > gxmax) break;
-			v = (char *)*(int32_t *)ixy; c = ce;
-		}
-			//Find highest intersecting vbuf slab
-		while (1)
-		{
-			if (!v[0]) goto drawfwall;
-			if (dmulrethigh(gylookup[v[2]+1],c->cx0,c->cy0,ogx) >= 0) break;
-			v += v[0]*4;
-		}
-			//If next slab ALSO intersects, split cf!
-		gy = gylookup[v[v[0]*4+3]];
-		if (dmulrethigh(gy,c->cx1,c->cy1,ogx) < 0)
-		{
-			col = (intptr_t)c->i1; dax = c->cx1; day = c->cy1;
-			while (dmulrethigh(gylookup[v[2]+1],dax,day,ogx) < 0)
-				{ col -= sizeof(castdat); dax -= gi0; day -= gi1; }
-			ce++; if (ce >= &cf[192]) return; //Give it max=64 entries like ASM
-			for(c2=ce;c2>c;c2--) c2[0] = c2[-1];
-			c[1].i1 = (castdat *)col; c->i0 = ((castdat *)col)+1;
-			c[1].cx1 = dax; c->cx0 = dax+gi0;
-			c[1].cy1 = day; c->cy0 = day+gi1;
-			c[1].z1 = c->z0 = v[v[0]*4+3];
-			VLT_RAW("Ksplit col=%ld next_v3=%d c[1].cx1=%08x c->cx0=%08x",
-			        (long)((castdat *)col - vlt_base),
-			        (int)(unsigned char)v[v[0]*4+3],
-			        c[1].cx1, c->cx0);
-			c++;
-		}
-	}
-//------------------------------------------------------------------------
-
-	for(c=ce;c>=&cf[128];c--)
-		while (c->i0 <= c->i1) { c->i0->col = 0; c->i0++; }
-	return;
-
-deletez:;
-	ce--; if (ce < &cf[128]) return;
-	for(c2=c;c2<=ce;c2++) c2[0] = c2[1];
-	goto afterdelete;
 #endif
 }
 
@@ -3396,14 +3012,10 @@ void opticast ()
 	ftol(gipos.z*PREC-.5f,&gposz);
 	gposxfrac[1] = gipos.x - (float)glipos.x; gposxfrac[0] = 1-gposxfrac[1];
 	gposyfrac[1] = gipos.y - (float)glipos.y; gposyfrac[0] = 1-gposyfrac[1];
-#if USEV5ASM
 	for(j=u=0;j<gmipnum;j++,u+=i)
 		for(i=0;i<(512>>j)+4;i++)
 			gylookup[i+u] = ((((gposz>>j)-i*PREC)>>(16-j))&0x0000ffff);
 	gxmip = max(vx5.mipscandist,4)*PREC;
-#else
-	for(i=0;i<256+4;i++) gylookup[i] = (i*PREC-gposz);
-#endif
 	gmaxscandist = min(max(vx5.maxscandist,1),4095)*PREC;
 
 #if (USEZBUFFER != 1)
@@ -12875,17 +12487,13 @@ static const int32_t grouscan_gylut_offsets[10] = {
  *   pmaddwd mm7, mm3             ; mm7.int32[0] = cx_hi*gy_low + cy_hi*depth_hi
  *   test eax, eax                ; sign test on low 32 bits
  *
- * is NOT algebraically equivalent to the C fallback's
- * `dmulrethigh(gy, cx, cy, depth) = (gy*cx - cy*depth) >> 32` — the
- * asm uses int16-signed operands and sums two int16×int16 products,
- * while dmulrethigh uses full int32×int32 and subtracts. They only
- * match when gylookup is populated in the C-fallback format
- * (`z*PREC - gposz`, full signed 32-bit). Under `USEV5ASM=1` (which
- * this build is), gylookup is populated in the asm format
- * (`((gposz>>j - z*PREC) >> (16-j)) & 0xFFFF`, low-16 signed
- * int16), so the scalar port MUST use the asm's pmaddwd expression
- * literally, and the draw-loop exit conditions must use the asm's
- * jle/jg comparison senses.
+ * is NOT algebraically equivalent to dmulrethigh's
+ * `(gy*cx - cy*depth) >> 32` — the asm uses int16-signed operands
+ * and sums two int16×int16 products. gylookup is populated in the
+ * matching asm format (`((gposz>>j - z*PREC) >> (16-j)) & 0xFFFF`,
+ * low-16 signed int16), so the scalar port MUST use the asm's
+ * pmaddwd expression literally, and the draw-loop exit conditions
+ * must use the asm's jle/jg comparison senses.
  *
  * Returns cx_hi16 * gy_low16_signed + cy_hi16 * depth_hi16_signed. */
 static inline int32_t grouscan_cross_sign (int32_t cx, int32_t cy,
@@ -12986,12 +12594,6 @@ static void grouscanasm_scalar (intptr_t vptr)
 
 drawfwall:
 	/* Front wall: fill pixels going left (decrementing ebx from c->i1). */
-	VLT_RAW("Lfw v=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d z0=%d z1=%d "
-	        "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x wlane=%d "
-	        "gi0=%08x gi1=%08x",
-	        (void *)v, v[0], v[1], v[2], v[3], z0, z1,
-	        cx0, cy0, cx1, cy1, ogx, gx, mm5_tail, wall_lane,
-	        gi0, gi1);
 	{
 		int32_t dv1 = (int32_t)v[1];
 		if (dv1 >= z1) goto drawcwall;
@@ -13011,11 +12613,10 @@ loop1:
 		/* Asm `jle endloop1` — exit the fill loop when the pmaddwd
 		 * sign test is ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-		if (test <= 0) { VLT_RAW("Xfw test=%d", test); goto endloop1; }
+		if (test <= 0) goto endloop1;
 		/* psubd mm1, _gi — advance right-edge ray left */
 		cx1 -= gi0; cy1 -= gi1;
 		/* Store pixel + depth. */
-		VLT_W("fw", ebx, color);
 		ebx->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		ebx->dist = ogx;
@@ -13031,8 +12632,6 @@ endloop1:
 
 drawcwall:
 	/* Back wall: fill pixels going right (incrementing ebx from c->i0). */
-	VLT_RAW("Lcw v=%p v[1]=%d v[3]=%d z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x",
-	        (void *)v, v[1], v[3], z0, z1, cx0, cy0, cx1, cy1, ogx);
 	{
 		/* Asm sets z1 = v[1] UNCONDITIONALLY at drawcwall entry
 		 * (`mov edx, eax` at v5.asm:266, where eax = v[1] from
@@ -13068,9 +12667,8 @@ loop3:
 	{
 		/* Asm `jg endloop3` — exit the back-wall fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
-		if (test > 0) { VLT_RAW("Xcw test=%d", test); goto endloop3; }
+		if (test > 0) goto endloop3;
 		cx0 += gi0; cy0 += gi1;
-		VLT_W("cw", ebx, color);
 		ebx->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		ebx->dist = ogx;
@@ -13093,19 +12691,16 @@ predrawceil:
 
 drawceil:
 	gy_raw = gylookoff[z0];
-	VLT_RAW("Lce z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x",
-	        z0, z1, cx0, cy0, cx1, cy1, ogx, gx, mm5_tail);
 drawceilloop:
 	{
 		/* Asm `jg drawflor` — leave the ceiling fill when > 0. */
 		int32_t test = grouscan_cross_sign(cx0, cy0, ogx, gy_raw);
-		if (test > 0) { VLT_RAW("Xce test=%d", test); goto drawflor; }
+		if (test > 0) goto drawflor;
 		cx0 += gi0; cy0 += gi1;
 		/* Ceiling colour = voxel ABOVE the slab top = previous slab's
 		 * last voxel = [v - 4] in the current linked-list layout. */
 		uint32_t vox = *(const uint32_t *)(v - 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[2]);
-		VLT_W("ce", c->i0, color);
 		c->i0->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		c->i0->dist = ogx;
@@ -13121,18 +12716,15 @@ predrawflor:
 
 drawflor:
 	gy_raw = gylookoff[z1];
-	VLT_RAW("Lfl z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x",
-	        z0, z1, cx0, cy0, cx1, cy1, ogx, gx, mm5_tail);
 drawflorloop:
 	{
 		/* Asm `jle enddrawflor` — leave the floor fill when ≤ 0. */
 		int32_t test = grouscan_cross_sign(cx1, cy1, ogx, gy_raw);
-		if (test <= 0) { VLT_RAW("Xfl test=%d", test); goto enddrawflor; }
+		if (test <= 0) goto enddrawflor;
 		cx1 -= gi0; cy1 -= gi1;
 		/* Floor colour = top voxel of CURRENT slab = [v + 4]. */
 		uint32_t vox = *(const uint32_t *)(v + 4);
 		color = grouscan_shade(vox, &mm5_tail, &gcsub[3]);
-		VLT_W("fl", c->i1, color);
 		c->i1->col = (int32_t)color;
 #if (USEZBUFFER == 1)
 		c->i1->dist = ogx;
@@ -13184,8 +12776,6 @@ afterdelete_kept_presync:
 			if ((uint32_t)new_gpz > (uint32_t)ngxmax) goto remiporend;
 			gpz[lane] += gdz[lane];
 		}
-		VLT_RAW("Kstep wlane=%d lane=%d ogx=%08x gx=%08x gpz0=%08x gpz1=%08x v=%p",
-		        wall_lane, lane, ogx, gx, gpz[0], gpz[1], (void *)v);
 		c = ce;
 		/* NB: c_presync may or may not equal new c (=ce) here. The
 		 * sync at skipixy2 handles both. */
@@ -13297,8 +12887,6 @@ intoslabloop:
 			c->z0 = next_v3;
 			c->cx0 = cx1 + gi0;
 			c->cy0 = cy1 + gi1;
-			VLT_RAW("Ksplit col=%ld next_v3=%d c[1].cx1=%08x c->cx0=%08x",
-			        (long)(col - vlt_base), next_v3, c[1].cx1, c->cx0);
 
 			/* Advance into the new top slot. Register mm1 (cx1/cy1
 			 * locals) still holds the search-end value, which is what
@@ -13335,22 +12923,17 @@ deletez:
 	 * is closed. Otherwise (c == ce), no shift needed. Falls into
 	 * afterdelete to pop c itself.
 	 *
-	 * Stage 4.5b.8c: when the shift fires, cf[c]'s memory is now the
-	 * data that lived at cf[c+1] (= old_ce, the just-freed slot's
-	 * origin). LOCAL cx0/cy0/cx1/cy1/z0/z1 still reflect the pre-
-	 * deletez iteration we just finished. The post-column-step skip-
-	 * sync test (`c_presync == c`) would otherwise fire here — both
-	 * sides equal cf[c] — and locals would never get re-loaded from
-	 * the now-shifted cf[c] memory. The asm gets this right by
-	 * setting `ebx = old_ce` inside deletez (v5.asm:765-770), which
-	 * later makes `cmp ebx, esp` at skipixy2 unequal so the sync
-	 * runs. We mirror that by stashing c_presync = old_ce and
-	 * jumping past afterdelete's `c_presync = c` re-assignment.
-	 *
-	 * Found by H8b (Stage 4.5b.8b) trace-asm vs trace-scalar diff at
-	 * c=1276 in high_down: post-Kstep Lfw cx0=18f76ca0 (asm, sync'd
-	 * from cf[c]) vs cx0=0a30568c (scalar, stale from pre-deletez
-	 * LOWER slab). */
+	 * When the shift fires, cf[c]'s memory is now the data that lived
+	 * at cf[c+1] (= old_ce, the just-freed slot's origin). LOCAL
+	 * cx0/cy0/cx1/cy1/z0/z1 still reflect the pre-deletez iteration
+	 * we just finished. The post-column-step skip-sync test
+	 * (`c_presync == c`) would otherwise fire here — both sides equal
+	 * cf[c] — and locals would never get re-loaded from the
+	 * now-shifted cf[c] memory. The asm gets this right by setting
+	 * `ebx = old_ce` inside deletez (v5.asm `deletez:`), which later
+	 * makes `cmp ebx, esp` at skipixy2 unequal so the sync runs. We
+	 * mirror that by stashing c_presync = old_ce and jumping past
+	 * afterdelete's `c_presync = c` re-assignment. */
 	{
 		if (ce <= &cf[128]) goto retsub;
 		cftype *old_ce = ce;
@@ -13476,12 +13059,6 @@ remiporend:
 		/* Reset current c to the top of the stack. */
 		c = ce;
 	}
-#ifdef VOXLAP_GROUSCAN_TRACE
-	/* H6: log post-mip-transition state for asm vs scalar comparison. */
-	VLT_RAW("Kremip gmipcnt=%d gpz0=%08x gpz1=%08x gdz0=%08x gdz1=%08x ngxmax=%08x",
-	        gmipcnt, (unsigned)gpz[0], (unsigned)gpz[1],
-	        (unsigned)gdz[0], (unsigned)gdz[1], (unsigned)ngxmax);
-#endif
 	goto skipixy2_sync_from_presync;
 
 startsky:

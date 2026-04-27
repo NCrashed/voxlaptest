@@ -79,46 +79,6 @@ if(VOXLAP_SCALAR_GROUSCAN)
     target_compile_definitions(voxlap PRIVATE VOXLAP_SCALAR_GROUSCAN)
 endif()
 
-# Stage 4.5b.7 reference build: compile voxlap with USEV5ASM=0 so gline
-# uses voxlap5.c's own scalar C-fallback (lines 1220+) along with the
-# C-format gylookup population at line 3152. Used as a known-correct
-# scalar implementation to 3-way diff against the asm path and the
-# VOXLAP_SCALAR_GROUSCAN port. Mutually exclusive with
-# VOXLAP_SCALAR_GROUSCAN — picking both would compile two different
-# gline implementations. voxasm is still linked because non-gline asm
-# data symbols (opti4asm, caddasm, ztabasm, ...) remain referenced by
-# the kv6 sprite path regardless of USEV5ASM.
-option(VOXLAP_USEV5ASM_FALLBACK "Compile voxlap with USEV5ASM=0 (C-fallback gline)" OFF)
-if(VOXLAP_USEV5ASM_FALLBACK)
-    if(VOXLAP_SCALAR_GROUSCAN)
-        message(FATAL_ERROR
-            "VOXLAP_USEV5ASM_FALLBACK and VOXLAP_SCALAR_GROUSCAN are mutually exclusive.")
-    endif()
-    target_compile_definitions(voxlap PRIVATE USEV5ASM=0)
-endif()
-
-# Stage 4.5b.7b: per-pixel grouscan trace harness. When ON, voxlap5.c
-# emits matching trace records from BOTH the scalar grouscan port and
-# the C-fallback gline (whichever is active for this build), gated by
-# voxlap_trace_open/close. The oracle harness opens a per-scene log;
-# the post-processing diff at tests/oracle/three_way_diff.py + helpers
-# compares the resulting traces. Independent of VOXLAP_SCALAR_GROUSCAN
-# / VOXLAP_USEV5ASM_FALLBACK — combine with either to trace that
-# implementation. Enable with -DVOXLAP_GROUSCAN_TRACE=ON.
-option(VOXLAP_GROUSCAN_TRACE "Emit per-pixel grouscan trace logs" OFF)
-if(VOXLAP_GROUSCAN_TRACE)
-    target_compile_definitions(voxlap PRIVATE VOXLAP_GROUSCAN_TRACE)
-    # `oracle` target is defined further down; oracle's flag is applied
-    # there once the target exists.
-    if(MSVC)
-        # Stage 4.5b.7h: also pass VOXLAP_GROUSCAN_TRACE to MASM so the
-        # asm-side trace hook in v5.asm (IFDEF blocks) compiles in for
-        # the windows-msvc-x86-trace-asm CI job. ml.exe accepts /D via
-        # CMake's COMPILE_DEFINITIONS for ASM_MASM targets.
-        target_compile_definitions(voxasm PRIVATE VOXLAP_GROUSCAN_TRACE)
-    endif()
-endif()
-
 # Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to
 # __declspec(dllexport) when building voxlap (CMake auto-defines
 # voxlap_EXPORTS for SHARED targets), __declspec(dllimport) in consumers,
@@ -149,9 +109,6 @@ endif()
 # --------------------------------------------------------------------------
 add_executable(oracle tests/oracle/oracle.c)
 target_link_libraries(oracle PRIVATE voxlap)
-if(VOXLAP_GROUSCAN_TRACE)
-    target_compile_definitions(oracle PRIVATE VOXLAP_GROUSCAN_TRACE)
-endif()
 
 # Oracle writes hashes.txt and *.png to its CWD. Give it a dedicated dir
 # so the CI upload step has a stable path to point at.

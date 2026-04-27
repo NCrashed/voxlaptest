@@ -188,14 +188,6 @@ VOXLAP_API extern void setsideshades (char, char, char, char, char, char);
 VOXLAP_API extern void setcamera (dpoint3d *, dpoint3d *, dpoint3d *, dpoint3d *, float, float, float);
 VOXLAP_API extern void opticast ();
 
-	//Stage 4.5b.7b: per-pixel grouscan trace harness. With the lib
-	//compiled with -DVOXLAP_GROUSCAN_TRACE=ON, voxlap_trace_open begins
-	//logging gline / grouscan events to `path`; voxlap_trace_close ends.
-	//`scene_idx` is recorded into each line so multi-scene runs can be
-	//split apart. Without the build flag both calls are no-ops, so the
-	//oracle harness can call them unconditionally.
-VOXLAP_API extern void voxlap_trace_open (const char *path, int32_t scene_idx);
-VOXLAP_API extern void voxlap_trace_close (void);
 VOXLAP_API extern void drawpoint2d (int32_t, int32_t, int32_t);
 VOXLAP_API extern void drawpoint3d (float, float, float, int32_t);
 VOXLAP_API extern void drawline2d (float, float, float, float, int32_t);
