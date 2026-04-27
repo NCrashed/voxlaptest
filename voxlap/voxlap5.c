@@ -3240,7 +3240,7 @@ void loadnul (dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe, dpoint3d *ifo)
 			v += 4;
 		}
 
-	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
+	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*sizeof(sptr[0]));
 	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
@@ -3344,7 +3344,7 @@ int32_t loaddta (const char *filename, dpoint3d *ipo, dpoint3d *ist, dpoint3d *i
 		for(;j;j--) { *(int32_t *)v = colorjit(longpal[dtacol[p]],0x70707); v += 4; }
 	}
 
-	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
+	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*sizeof(sptr[0]));
 	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
@@ -3432,7 +3432,7 @@ int32_t loadpng (const char *filename, dpoint3d *ipo, dpoint3d *ist, dpoint3d *i
 		while (j) { k += l; *(int32_t *)v = colorjit(k,0x30303); v += 4; j--; }
 	}
 
-	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
+	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*sizeof(sptr[0]));
 	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
@@ -3521,7 +3521,7 @@ void loadbsp (const char *filnam, dpoint3d *ipo, dpoint3d *ist, dpoint3d *ihe, d
 			(*(int32_t *)v) = ((x^y)&15)*0x10101+0x807c7c7c; v += 4;
 		}
 
-	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
+	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*sizeof(sptr[0]));
 	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
@@ -3647,7 +3647,7 @@ int32_t loadvxl (const char *lodfilnam, dpoint3d *ipo, dpoint3d *ist, dpoint3d *
 	}
 	kzclose();
 
-	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*4);
+	memset(&sptr[VSID*VSID],0,sizeof(sptr)-VSID*VSID*sizeof(sptr[0]));
 	vbiti = (((intptr_t)v-(intptr_t)vbuf)>>2); //# vbuf longs/vbit bits allocated
 	clearbuf((void *)vbit,vbiti>>5,-1);
 	clearbuf((void *)&vbit[vbiti>>5],(VOXSIZ>>7)-(vbiti>>5),0);
