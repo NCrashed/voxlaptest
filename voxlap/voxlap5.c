@@ -5490,27 +5490,33 @@ void genmipvxl (int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 							{
 								zz = (int32_t)tbuf[oldn+2];
 
-								_asm //*(int32_t *)&tbuf[n] = mixc[zz][rand()%mixn[zz]];
-								{    //mixn[zz] = 0;
-									mov eax, zz
-									mov ecx, mixn[eax*4]
-									mov mixn[eax*4], 0
-									shl eax, 5
-									pxor mm0, mm0
-									movq mm2, qmulmip[ecx*8-8]
-									pcmpeqb mm6, mm6
-									movq mm7, mm0
-					 vxlmipbeg0:movd mm1, mixc[eax+ecx*4-4]
-									punpcklbw mm1, mm7
-									paddw mm0, mm1
-									dec ecx
-									jnz short vxlmipbeg0
-									paddw mm0, mm0
-									psubw mm0, mm6 ;rounding bias
-									pmulhw mm0, mm2
-									packuswb mm0, mm0
-									mov eax, n
-									movd tbuf[eax], mm0
+								/* Average mixn[zz] colours from mixc[zz][0..mixn[zz]-1]
+								 * with byte-wise saturation, then clear mixn[zz].
+								 * Matches MMX kernel: paddw accumulators × 4 channels,
+								 * then ((sum*2+1) * (32768/N)) >> 16 via pmulhw with
+								 * qmulmip[N-1], then packuswb. */
+								{
+									int32_t n_vox = mixn[zz];
+									int32_t mul = (int32_t)(uint16_t)
+										((uint64_t)qmulmip[n_vox-1] & 0xffffu);
+									uint32_t sum[4] = {0,0,0,0};
+									int32_t k, b;
+									uint32_t out = 0;
+									mixn[zz] = 0;
+									for (k = n_vox-1; k >= 0; k--) {
+										uint32_t c = (uint32_t)mixc[zz][k];
+										sum[0] += (c >>  0) & 0xffu;
+										sum[1] += (c >>  8) & 0xffu;
+										sum[2] += (c >> 16) & 0xffu;
+										sum[3] += (c >> 24) & 0xffu;
+									}
+									for (b = 0; b < 4; b++) {
+										int32_t v = (int32_t)(((sum[b]*2u + 1u) * (uint32_t)mul) >> 16);
+										if (v < 0)   v = 0;
+										if (v > 255) v = 255;
+										out |= ((uint32_t)v) << (b*8);
+									}
+									*(int32_t *)&tbuf[n] = (int32_t)out;
 								}
 
 								tbuf[oldn+2]++; n += 4;
@@ -5531,27 +5537,29 @@ void genmipvxl (int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 							}
 							while ((cz<<1) < z)
 							{
-								_asm //*(int32_t *)&tbuf[n] = mixc[cz][rand()%mixn[cz]];
-								{    //mixn[cz] = 0;
-									mov eax, cz
-									mov ecx, mixn[eax*4]
-									mov mixn[eax*4], 0
-									shl eax, 5
-									pxor mm0, mm0
-									movq mm2, qmulmip[ecx*8-8]
-									pcmpeqb mm6, mm6
-									movq mm7, mm0
-					 vxlmipbeg1:movd mm1, mixc[eax+ecx*4-4]
-									punpcklbw mm1, mm7
-									paddw mm0, mm1
-									dec ecx
-									jnz short vxlmipbeg1
-									paddw mm0, mm0
-									psubw mm0, mm6 ;rounding bias
-									pmulhw mm0, mm2
-									packuswb mm0, mm0
-									mov eax, n
-									movd tbuf[eax], mm0
+								/* Same colour-averaging kernel as the zz path above. */
+								{
+									int32_t n_vox = mixn[cz];
+									int32_t mul = (int32_t)(uint16_t)
+										((uint64_t)qmulmip[n_vox-1] & 0xffffu);
+									uint32_t sum[4] = {0,0,0,0};
+									int32_t k, b;
+									uint32_t out = 0;
+									mixn[cz] = 0;
+									for (k = n_vox-1; k >= 0; k--) {
+										uint32_t c = (uint32_t)mixc[cz][k];
+										sum[0] += (c >>  0) & 0xffu;
+										sum[1] += (c >>  8) & 0xffu;
+										sum[2] += (c >> 16) & 0xffu;
+										sum[3] += (c >> 24) & 0xffu;
+									}
+									for (b = 0; b < 4; b++) {
+										int32_t v = (int32_t)(((sum[b]*2u + 1u) * (uint32_t)mul) >> 16);
+										if (v < 0)   v = 0;
+										if (v > 255) v = 255;
+										out |= ((uint32_t)v) << (b*8);
+									}
+									*(int32_t *)&tbuf[n] = (int32_t)out;
 								}
 
 								cz++; n += 4;
@@ -8161,8 +8169,9 @@ void drawpicinquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 	} while (i != imax);
 }
 
-__declspec(align(16)) static float dpqdistlut[MAXXDIM];
-__declspec(align(16)) static float dpqmulval[4] = {0,1,2,3}, dpqfour[4] = {4,4,4,4};
+/* dpqdistlut/dpqmulval/dpqfour were lookup tables for the SSE rcpps
+ * batch z-recip in drawspherefill's inner loop, removed in Stage 4.7
+ * along with the inline asm. */
 void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 						 float x0, float y0, float z0, float u0, float v0,
 						 float x1, float y1, float z1, float u1, float v1,
@@ -8275,8 +8284,12 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 	ub = pu[0] - px[0]*ux - py[0]*uy;
 	vb = pv[0] - px[0]*vx - py[0]*vy;
 
-#if 1
-		//Make sure k's are in good range for conversion to integers...
+	/* Range-clamp to keep ftol conversions in the int32 sweet spot.
+	 * Original code further multiplied dx*scaler into xmm6/xmm7 for
+	 * a parallel rcpps inner loop in the rasterizer below; that
+	 * optimised path was disabled along with the SSE inline asm in
+	 * Stage 4.7 (drawspherefill is oracle-uncovered, so the brute-
+	 * force `#if 0` path is now the only path). */
 	t = fabs(ux);
 	if (fabs(uy) > t) t = fabs(uy);
 	if (fabs(ub) > t) t = fabs(ub);
@@ -8292,17 +8305,6 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 	dx *= scaler; dy *= scaler; db *= scaler;
 	ftol(dx,&ddi);
 	uvmax = (rysiz-1)*rbpl + (rxsiz<<2);
-
-	scaler = 1.f/scaler; t = dx*scaler;
-	_asm //SSE
-	{
-		movss xmm6, t         ;xmm6: -,-,-,dx*scaler
-		shufps xmm6, xmm6, 0  ;xmm6: dx*scaler,dx*scaler,dx*scaler,dx*scaler
-		movaps xmm7, xmm6     ;xmm7: dx*scaler,dx*scaler,dx*scaler,dx*scaler
-		mulps xmm6, dpqmulval ;xmm6: dx*scaler*3,dx*scaler*2,dx*scaler*1,0
-		mulps xmm7, dpqfour   ;xmm7: dx*scaler*4,dx*scaler*4,dx*scaler*4,dx*scaler*4
-	}
-#endif
 
 	imin = (py[1]<py[0]); imax = 1-imin;
 	for(i=n-1;i>1;i--)
@@ -8343,8 +8345,12 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 				if (sx >= sxe) continue;
 				p  = (int32_t *)(sy*bytesperline+(sx<<2)+frameplace);
 				pe = (int32_t *)(sy*bytesperline+(sxe<<2)+frameplace);
-#if 0
-					//Brute force
+				/* Brute-force per-pixel hyperbolic texture-map. The
+				 * original branch alternative was an SSE rcpps batch
+				 * (4 z-recips at once via dpqdistlut) plus an
+				 * incremental texture-coord update; both replaced
+				 * here with the straightforward C path that the
+				 * disabled `#if 0` branch already carried. */
 				do
 				{
 					f = 1.f/(dx*(float)sx + dy*(float)sy + db);
@@ -8359,55 +8365,6 @@ void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 					}
 					p++; sx++;
 				} while (p < pe);
-#else
-					//Optimized (in C) hyperbolic texture-mapping (Added Z-buffer using SSE for recip's)
-				t = dx*(float)sx + dy*(float)sy + db; r = 1.0 / t;
-				u = ux*(float)sx + uy*(float)sy + ub; ftol(u*r-.5,&iu);
-				v = vx*(float)sx + vy*(float)sy + vb; ftol(v*r-.5,&iv);
-				ftol(t,&dd);
-				ftol((float)iu*dx - ux,&uui); ftol((float)iu*t - u,&uu);
-				ftol((float)iv*dx - vx,&vvi); ftol((float)iv*t - v,&vv);
-				if (ux*t < u*dx) k =    -4; else { uui = -(uui+ddi); uu = -(uu+dd); k =    4; }
-				if (vx*t < v*dx) l = -rbpl; else { vvi = -(vvi+ddi); vv = -(vv+dd); l = rbpl; }
-				iu = iv*rbpl + (iu<<2);
-
-				t *= scaler;
-				_asm
-				{
-					mov ecx, sxe
-					sub ecx, sx
-					xor eax, eax
-					lea ecx, [ecx*4]
-					sub eax, ecx
-					add ecx, offset dpqdistlut
-
-					movss xmm0, t ;dd+ddi*3 dd+ddi*2 dd+ddi*1 dd+ddi*0
-					shufps xmm0, xmm0, 0
-					addps xmm0, xmm6
-	 dpqbegsse: rcpps xmm1, xmm0
-					addps xmm0, xmm7
-					movaps [eax+ecx], xmm1
-					add eax, 16
-					jl short dpqbegsse
-				}
-				distlutoffs = ((intptr_t)dpqdistlut)-((intptr_t)p);
-				do
-				{
-#if (USEZBUFFER != 0)
-					if (*(int32_t *)(((intptr_t)p)+zbufoff) > *(int32_t *)(((intptr_t)p)+distlutoffs))
-					{
-						*(int32_t *)(((intptr_t)p)+zbufoff) = *(int32_t *)(((intptr_t)p)+distlutoffs);
-#endif
-						if ((uint32_t)iu < uvmax) p[0] = *(int32_t *)(rpic+iu);
-#if (USEZBUFFER != 0)
-					}
-#endif
-					dd += ddi;
-					uu += uui; while (uu < 0) { iu += k; uui -= ddi; uu -= dd; }
-					vv += vvi; while (vv < 0) { iu += l; vvi -= ddi; vv -= dd; }
-					p++;
-				} while (p < pe);
-#endif
 			}
 		}
 		i = j;
