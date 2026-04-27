@@ -39,6 +39,8 @@ extern void set_colfunc(int32_t (*v)(lpoint3d *));
 extern void set_fogcol(int32_t v);
 extern void set_anginc(int32_t v);
 extern void setMaxScanDist(int32_t v);
+extern void setLightingMode(int32_t mode);
+extern int32_t add_light(float px, float py, float pz, float radius, float intens);
 
 /* Voxlap's 32-bit colour is packed as (brightness<<24) | (R<<16) | (G<<8) | B.
  * The alpha byte is *brightness*, not opacity: setting it to 0x00 renders
@@ -209,9 +211,18 @@ static void build_scene(void) {
 
 	g_coco_sprite.flags = 0;
 	g_coco_sprite.p.x = 1110.f; g_coco_sprite.p.y = 1080.f; g_coco_sprite.p.z = 175.f;
-	g_coco_sprite.s.x = 1.f; g_coco_sprite.s.y = 0.f; g_coco_sprite.s.z = 0.f;
-	g_coco_sprite.h.x = 0.f; g_coco_sprite.h.y = 1.f; g_coco_sprite.h.z = 0.f;
-	g_coco_sprite.f.x = 0.f; g_coco_sprite.f.y = 0.f; g_coco_sprite.f.z = 1.f;
+	/* Rotate the kv6 model 120° about world-Z so its local (xsiz, ysiz)
+	 * axes are no longer aligned with world (X, Y). Exercises the
+	 * non-axis-aligned drawsprite path (rotated bound-cube projection
+	 * + rotated voxel-walk in drawboundcube_*) which axis-aligned
+	 * sprites would skip. */
+	{
+		const float ang = 2.f * 3.14159265358979323846f / 3.f;
+		const float ca = (float)cos(ang), sa = (float)sin(ang);
+		g_coco_sprite.s.x =  ca;  g_coco_sprite.s.y = sa; g_coco_sprite.s.z = 0.f;
+		g_coco_sprite.h.x = -sa;  g_coco_sprite.h.y = ca; g_coco_sprite.h.z = 0.f;
+		g_coco_sprite.f.x = 0.f;  g_coco_sprite.f.y = 0.f; g_coco_sprite.f.z = 1.f;
+	}
 	g_coco_sprite.kfatim = 0;
 	g_coco_sprite.okfatim = 0;
 
@@ -239,28 +250,40 @@ struct pose {
 	double px, py, pz;
 	double yaw, pitch;
 	vx5sprite *sprite; /* NULL = no sprite, else drawsprite this kv6data */
+	int32_t lit;       /* 1 = bake lightmode-2 lighting into voxel intensities
+	                    *     before this pose's render. Bake is one-shot
+	                    *     (subsequent poses keep the lit voxel state). */
 };
 
 int main(void) {
 	static const struct pose poses[] = {
-		{"north",        1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0, NULL},
-		{"east",         1024.0, 1024.0, 128.0, 0.0,                0.0, NULL},
-		{"diag_down",    1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL},
-		{"high_down",    1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7, NULL},
+		{"north",          1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0, NULL,            0},
+		{"east",           1024.0, 1024.0, 128.0, 0.0,                0.0, NULL,            0},
+		{"diag_down",      1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL,            0},
+		{"high_down",      1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7, NULL,            0},
 		/* Sprite poses: camera aimed at g_sprite at (1050, 1050, 175).
 		 * front: eye-level, looking at sprite along +x.
 		 * above: slightly in front, pitched steeply toward the sprite.
 		 * iso:   diagonal approach, mild pitch. */
-		{"sprite_front", 1020.0, 1050.0, 175.0, 0.0,                0.0, &g_sprite},
-		{"sprite_above", 1050.0, 1050.0, 150.0, 0.0,                1.3, &g_sprite},
-		{"sprite_iso",   1020.0, 1020.0, 160.0, 0.7853981633974483, 0.4, &g_sprite},
-		/* External KVX sprite: g_coco_sprite at (1110, 1080, 175);
-		 * camera 30u east of it looking west. */
-		{"sprite_coco",  1140.0, 1080.0, 175.0, 3.141592653589793, 0.0, &g_coco_sprite},
+		{"sprite_front",   1020.0, 1050.0, 175.0, 0.0,                0.0, &g_sprite,       0},
+		{"sprite_above",   1050.0, 1050.0, 150.0, 0.0,                1.3, &g_sprite,       0},
+		{"sprite_iso",     1020.0, 1020.0, 160.0, 0.7853981633974483, 0.4, &g_sprite,       0},
+		/* External KVX sprite (g_coco_sprite at (1110, 1080, 175),
+		 * rotated 120° about Z), viewed isometrically from SW. The
+		 * iso angle + non-axis-aligned model orientation together
+		 * exercise the rotated drawsprite path (drawboundcube_*). */
+		{"sprite_coco",    1080.0, 1050.0, 160.0, 0.7853981633974483, 0.4, &g_coco_sprite,  0},
+		/* Variant of diag_down with lightmode-2 baking enabled, so
+		 * voxel intensities reflect a single point light at
+		 * (1100, 1100, 70) — top faces brighter than walls/floor.
+		 * MUST come after every unlit pose (the bake mutates the
+		 * world voxel intensities and persists across renders). */
+		{"diag_down_lit",  1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL,            1},
 	};
 	const size_t N = sizeof(poses) / sizeof(poses[0]);
 	size_t i;
 	FILE *hf;
+	int32_t lighting_baked = 0;
 
 	if (initvoxlap() < 0) { fprintf(stderr, "initvoxlap failed\n"); return 1; }
 
@@ -278,6 +301,19 @@ int main(void) {
 		/* Pre-fill with the same sky-blue that fogcol uses, so any pixel
 		 * opticast happens to leave untouched still reads as sky. */
 		for (k = 0; k < XRES * YRES; k++) g_fb[k] = (int32_t)BR(0x87ceeb);
+
+		/* Lit pose: one-shot bake of lightmode-2 lighting into the
+		 * voxel-intensity bytes of every voxel inside the playable box.
+		 * vx5.lightmode = 2 picks the path in updatelighting that uses
+		 * estnorm() per voxel + Lambertian fall-off against each light
+		 * source (voxlap5.c:11479+), so faces get differential
+		 * brightness based on their estimated surface normal. */
+		if (poses[i].lit && !lighting_baked) {
+			setLightingMode(2);
+			add_light(1100.f, 1100.f, 70.f, 600.f, 1.0f);
+			updatelighting(800, 800, 0, 1248, 1248, 200);
+			lighting_baked = 1;
+		}
 
 		set_camera_yaw_pitch(poses[i].px, poses[i].py, poses[i].pz,
 		                     poses[i].yaw, poses[i].pitch);
