@@ -125,8 +125,8 @@ Risk: the MMX rasterizer uses subtle fixed-point tricks and register pairing. Bu
 | 4.2 | Delete all `*_3dn` variants (per decision 2 — drop 3DNow). Gut `getcputype`'s dispatch use while keeping the function for diagnostics | Hash-neutral on modern CPUs (CI runner never selects `_3dn`) | Halves the inline-asm block count; removes 3DNow from `v5.asm` |
 | 4.3 | SSE point4d helpers (line ~9741+) → `<emmintrin.h>` SSE2 intrinsics | Bit-exact (same SSE2 instructions emitted) | Block compiles under `-msse2` on any x86-64 |
 | 4.4 | `drawboundcube_sse` sprite rasterizer → SSE2 intrinsics + scalar fallback | Target bit-exact; budget for re-freeze of the 3 sprite_* goldens | Sprite path renders on Linux/macOS |
-| 4.5 | `grouscanasm` (the 606-line MMX scanline) → scalar C + SSE2. See [docs/grouscan-algorithm.md](docs/grouscan-algorithm.md) for the deep algorithm walkthrough; [voxasm/GROUSCANASM.md](voxasm/GROUSCANASM.md) covers asm-side specifics. | Re-freeze likely, probably all 7 poses | Terrain path renders on Linux/macOS |
-| 4.6 | Delete `voxasm/v5.asm`, remove `v5_asm_dep_unlock`, gut `getcputype`, drop `enable_language(ASM_MASM)` in CMake | Hash-neutral if 4.5 lands correctly | MASM no longer required — CMake can target non-MSVC toolchains end-to-end |
+| 4.5 | ✅ **Done (4.5b.8c).** `grouscanasm` ported to scalar C (`grouscanasm_scalar` in voxlap5.c). 7 oracle hashes refrozen; sprite_coco + diag_down_lit added in 4.5b.9 for KVX-load + lighting coverage. SSE2 acceleration of `grouscan_shade` / `grouscan_cross_sign` left as a follow-up. See [docs/grouscan-algorithm.md](docs/grouscan-algorithm.md) for the algorithm walkthrough. |
+| 4.6 | ✅ **Done.** Deleted `voxasm/v5.asm`, removed `v5_asm_dep_unlock` + the asm dispatch path, dropped `enable_language(ASM_MASM)` and the `voxasm` CMake target. v5.asm's data symbols (cfasm, skycast, opti4asm, caddasm, ztabasm, scisdist, kv6colmul/coladd, qsum0/1, qbplbpp, kv6frameplace, kv6bytesperline) moved to voxlap5.c. Hash-neutral. MSVC-only build remains (Stage 2 below replaces the inline `_asm` blocks in voxlap5.c that still block GCC/Clang/macOS). |
 
 ### Stage 5 — Rust bindings + Rust host (2–3 weeks)
 

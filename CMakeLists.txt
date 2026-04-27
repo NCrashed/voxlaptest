@@ -12,14 +12,6 @@ project(voxlaptest
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-# v5.asm is MSVC MASM. CMake has built-in support for it via ASM_MASM. The
-# assembler isn't available on GCC/Clang toolchains; Linux/macOS configure
-# still succeeds but will fail to link voxlap (unresolved grouscanasm /
-# drawboundcube* references) until Stage 3/4 replaces v5.asm.
-if(MSVC)
-    enable_language(ASM_MASM)
-endif()
-
 # All targets share the static multi-threaded CRT so there's only one copy
 # of the runtime in the process, matching the vcxproj's
 # RuntimeLibrary=MultiThreaded. CMake applies this only on MSVC; GCC/Clang
@@ -42,13 +34,6 @@ if(MSVC)
 endif()
 
 # --------------------------------------------------------------------------
-# voxasm — MASM-assembled static library, linked into voxlap.dll on Windows.
-# --------------------------------------------------------------------------
-if(MSVC)
-    add_library(voxasm STATIC voxasm/v5.asm)
-endif()
-
-# --------------------------------------------------------------------------
 # voxlap — the engine, built as a shared library. Public header is
 # voxlap/voxlap5.h; consumers get it via target_include_directories PUBLIC.
 # --------------------------------------------------------------------------
@@ -68,17 +53,6 @@ target_compile_definitions(voxlap PRIVATE
     _USRDLL
 )
 
-# Stage 4.5b dev toggle: build voxlap using the scalar C port of
-# grouscanasm (voxlap/voxlap5.c) instead of the MMX asm entry point
-# in voxasm/v5.asm. OFF by default — the scalar port is incomplete
-# and rendering with it set ON will be visibly wrong until 4.5b
-# lands its final chunks. Enable with -DVOXLAP_SCALAR_GROUSCAN=ON to
-# diff scalar output against the asm goldens as the port progresses.
-option(VOXLAP_SCALAR_GROUSCAN "Use the scalar C port of grouscanasm" OFF)
-if(VOXLAP_SCALAR_GROUSCAN)
-    target_compile_definitions(voxlap PRIVATE VOXLAP_SCALAR_GROUSCAN)
-endif()
-
 # Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to
 # __declspec(dllexport) when building voxlap (CMake auto-defines
 # voxlap_EXPORTS for SHARED targets), __declspec(dllimport) in consumers,
@@ -94,13 +68,6 @@ generate_export_header(voxlap
 target_include_directories(voxlap PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
 )
-
-if(MSVC)
-    target_link_libraries(voxlap PRIVATE voxasm)
-    # /SAFESEH:NO — v5.asm isn't annotated for Safe Exception Handlers,
-    # matching the vcxproj's ImageHasSafeExceptionHandlers=false.
-    target_link_options(voxlap PRIVATE /SAFESEH:NO)
-endif()
 
 # --------------------------------------------------------------------------
 # oracle — Stage 0 regression-hash harness. Builds the procedural scene,

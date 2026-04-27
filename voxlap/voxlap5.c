@@ -115,14 +115,20 @@ typedef struct { int32_t x, y; } lpoint2d;
 typedef struct { float x, y; } point2d;
 #pragma pack(pop)
 
-#ifndef __cplusplus
-	extern void *cfasm;
-	extern castdat skycast;
-#else
-	extern "C" void *cfasm;
-	extern "C" castdat skycast;
+/* Stage 4.6: cfasm + skycast moved out of v5.asm. The asm declared
+ * `_cfasm db 256*32 dup(0)` (8192 bytes, used as cftype[256]) and
+ * `_skycast dq 0` (single qword). Defined here so MSVC inline asm
+ * elsewhere in this file (which still references `cfasm` / `skycast`
+ * by name) keeps linking after v5.asm is gone. */
+#ifdef __cplusplus
+extern "C" {
 #endif
-	#define cf ((cftype *)&cfasm)
+int8_t cfasm[256*32];
+castdat skycast;
+#ifdef __cplusplus
+}
+#endif
+#define cf ((cftype *)&cfasm[0])
 
 	//Screen related variables:
 static int32_t xres, yres, bytesperline, frameplace, xres4;
@@ -209,15 +215,10 @@ int32_t gpz[2], gdz[2], gxmip, gxmax, gixy[2], gpixy;
 static int32_t gmaxscandist;
 
 //int32_t reax, rebx, recx, redx, resi, redi, rebp, resp, remm[16];
-void v5_asm_dep_unlock();
-void grouscanasm (int32_t);
-#ifdef VOXLAP_SCALAR_GROUSCAN
-/* Stage 4.5b: scalar C port of grouscanasm. Toggled at CMake time via
- * -DVOXLAP_SCALAR_GROUSCAN=ON. Defined further down the file once all
- * its static helpers and the cfentry data model are in scope. See
- * voxasm/GROUSCANASM.md for the algorithm spec this implements. */
+/* Scalar C port of the original MMX grouscanasm; defined further down
+ * the file once all its static helpers + cfentry data model are in
+ * scope. See docs/grouscan-algorithm.md for the spec this implements. */
 static void grouscanasm_scalar (intptr_t vptr);
-#endif
 #if (USEZBUFFER == 1)
 int32_t zbufoff;
 #endif
@@ -1184,11 +1185,7 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 		skyoff = skycurlng*skybpl + nskypic;
 	}
 
-#ifdef VOXLAP_SCALAR_GROUSCAN
 	grouscanasm_scalar((intptr_t)gstartv);
-#else
-	grouscanasm((intptr_t)gstartv);
-#endif
 }
 
 /* mmxcoloradd / mmxcolorsub are saturated byte add / subtract of `*a`
@@ -1869,8 +1866,11 @@ static int32_t ofogdist = -1;
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern void *opti4asm;
-#define opti4 ((point4d *)&opti4asm)
+/* Stage 4.6: 5 × point4d scratch table moved out of v5.asm
+ * (originally `_opti4asm dd 5*4 dup(0)`). Used by the SSE2 inline asm
+ * in vrendzsse / hrendzsse / fogvrendzsse / foghrendzsse below. */
+int32_t opti4asm[5*4];
+#define opti4 ((point4d *)&opti4asm[0])
 #ifdef __cplusplus
 }
 #endif
@@ -8960,18 +8960,32 @@ kv6data *getkv6 (const char *filnam)
 	return(kv6ptr);
 }
 
+/* Stage 4.6: kv6 sprite-render scratch + tables moved out of v5.asm.
+ * Original asm allocations:
+ *   _caddasm dd 8*4 dup(0)            ; 32 dwords (8 × point4d)
+ *   _ztabasm dd (MAXZSIZ+3)*4 dup(0)  ; (MAXZSIZ+3) × point4d
+ *   _qsum0 / _qsum1 / _qbplbpp dq 0   ; one qword each (4 × short)
+ *   _kv6frameplace / _kv6bytesperline dd 0
+ *   _scisdist dd 40800000h, 0, 0, 0   ; 16 bytes, low dword = 4.0f
+ *   _kv6colmul dq 256 dup(0)          ; 256 qwords
+ *   _kv6coladd dq 0                   ; one qword (C side declares [256])
+ * MSVC inline asm in this file references these by their unmangled C
+ * names (no leading underscore in C source); the linker pairs them. */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern void *caddasm;
-#define cadd4 ((point4d *)&caddasm)
-extern void *ztabasm;
-#define ztab4 ((point4d *)&ztabasm)
-extern short qsum0[4], qsum1[4], qbplbpp[4];
-extern int32_t kv6frameplace, kv6bytesperline;
-extern float scisdist;
-extern int64_t kv6colmul[256], kv6coladd[256];
+int32_t caddasm[8*4];
+#define cadd4 ((point4d *)&caddasm[0])
+int32_t ztabasm[(MAXZSIZ+3)*4];
+#define ztab4 ((point4d *)&ztabasm[0])
+short qsum0[4], qsum1[4], qbplbpp[4];
+int32_t kv6frameplace, kv6bytesperline;
+/* _scisdist was 4 dwords (16 bytes) in the asm; the upper 12 are zero
+ * pad. C code only ever reads it as a single float (`_mm_load_ss` —
+ * 4 bytes), so the pad is dropped. */
+float scisdist = 4.0f;
+int64_t kv6colmul[256], kv6coladd[256];
 
 char ptfaces16[43][8] =
 {
@@ -12374,8 +12388,6 @@ void uninitvoxlap ()
 	if (radarmem) { free(radarmem); radarmem = 0; radar = 0; }
 }
 
-#ifdef VOXLAP_SCALAR_GROUSCAN
-
 /* --- Color pipeline helper ---
  *
  * Replicates the asm sequence:
@@ -12506,8 +12518,9 @@ static inline int32_t grouscan_cross_sign (int32_t cx, int32_t cy,
 	return cx_s16 * gy_s16 + cy_s16 * depth_s16;
 }
 
-/* Scalar C port of _grouscanasm (voxasm/v5.asm). See
- * voxasm/GROUSCANASM.md for the spec.
+/* Scalar C port of voxlap's per-scanline voxel rasterizer (formerly
+ * `_grouscanasm` in voxasm/v5.asm, removed in Stage 4.6). See
+ * docs/grouscan-algorithm.md for the algorithmic spec.
  *
  * Body landing in sub-commits:
  *   4.5b.2 — this commit: prologue + cfasm data model + dispatch
@@ -13139,7 +13152,6 @@ retsub:
 	 * the asm had one before v5.asm's deletion. */
 	return;
 }
-#endif
 
 int32_t initvoxlap ()
 {
@@ -13147,7 +13159,10 @@ int32_t initvoxlap ()
 	int32_t i, j, k, z, zz;
 	float f, ff;
 
-	v5_asm_dep_unlock();
+	/* v5_asm_dep_unlock() was a runtime VirtualProtect call that
+	 * marked v5.asm's data segment executable for the asm code path
+	 * to run. With v5.asm gone (Stage 4.6), no asm code is loaded —
+	 * nothing to DEP-unlock. */
 
 	cputype = getcputype();
 		//CPU Must have: FPU,RDTSC,CMOV,MMX,MMX+
