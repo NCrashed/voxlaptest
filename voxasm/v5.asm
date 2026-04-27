@@ -415,38 +415,45 @@ ENDIF
 	mov esp, ce
 
 IFDEF VOXLAP_GROUSCAN_TRACE
-	;Stage 4.5b.7h (H5): trace hook. Save MMX, emms, push args (cdecl,
-	;right-to-left), call C, restore MMX. mm6.dword[0] = ogx, dword[1] = gx
-	;at this point (post punpckldq + pand). We log the post-Kstep state so
-	;it's directly comparable to the scalar port's Kstep VLT_RAW event.
-	movq qword ptr _voxlap_asm_savemm[0],  mm0
-	movq qword ptr _voxlap_asm_savemm[8],  mm1
-	movq qword ptr _voxlap_asm_savemm[16], mm2
-	movq qword ptr _voxlap_asm_savemm[24], mm3
-	movq qword ptr _voxlap_asm_savemm[32], mm4
-	movq qword ptr _voxlap_asm_savemm[40], mm5
-	movq qword ptr _voxlap_asm_savemm[48], mm6
-	movq qword ptr _voxlap_asm_savemm[56], mm7
+	;Stage 4.5b.7h (H5): trace hook. Save MMX + all GPRs around the C
+	;call. cdecl marks EAX/ECX/EDX as caller-saved, so the C function
+	;is free to clobber them — but the asm uses ECX as z0 and EDX as
+	;z1 across iterations, and skipixy2's sync writes ECX/EDX into the
+	;c_presync slot. Without PUSHAD/POPAD, garbage ECX/EDX corrupts
+	;the cfasm slot and intoslabloop's `[eax+ecx*4]` index reads from
+	;a wild address (STATUS_ACCESS_VIOLATION 0xC0000005 on first run).
+	movq qword ptr [_voxlap_asm_savemm + 0],  mm0
+	movq qword ptr [_voxlap_asm_savemm + 8],  mm1
+	movq qword ptr [_voxlap_asm_savemm + 16], mm2
+	movq qword ptr [_voxlap_asm_savemm + 24], mm3
+	movq qword ptr [_voxlap_asm_savemm + 32], mm4
+	movq qword ptr [_voxlap_asm_savemm + 40], mm5
+	movq qword ptr [_voxlap_asm_savemm + 48], mm6
+	movq qword ptr [_voxlap_asm_savemm + 56], mm7
 	emms
+
+	pushad                                            ;save all GPRs
 
 	push edi                                          ;arg 7: v
 	push dword ptr _gpz[4]                            ;arg 6: gpz1
 	push dword ptr _gpz[0]                            ;arg 5: gpz0
-	push dword ptr _voxlap_asm_savemm[52]             ;arg 4: gx (mm6.dword[1])
-	push dword ptr _voxlap_asm_savemm[48]             ;arg 3: ogx (mm6.dword[0])
+	push dword ptr [_voxlap_asm_savemm + 52]          ;arg 4: gx (mm6.dword[1])
+	push dword ptr [_voxlap_asm_savemm + 48]          ;arg 3: ogx (mm6.dword[0])
 	push ebp                                          ;arg 2: lane (NEW)
 	push dword ptr _voxlap_asm_oldebp                 ;arg 1: wlane (OLD)
 	call _voxlap_trace_asm_kstep
 	add esp, 28                                       ;7 args * 4 bytes
 
-	movq mm0, qword ptr _voxlap_asm_savemm[0]
-	movq mm1, qword ptr _voxlap_asm_savemm[8]
-	movq mm2, qword ptr _voxlap_asm_savemm[16]
-	movq mm3, qword ptr _voxlap_asm_savemm[24]
-	movq mm4, qword ptr _voxlap_asm_savemm[32]
-	movq mm5, qword ptr _voxlap_asm_savemm[40]
-	movq mm6, qword ptr _voxlap_asm_savemm[48]
-	movq mm7, qword ptr _voxlap_asm_savemm[56]
+	popad                                             ;restore all GPRs
+
+	movq mm0, qword ptr [_voxlap_asm_savemm + 0]
+	movq mm1, qword ptr [_voxlap_asm_savemm + 8]
+	movq mm2, qword ptr [_voxlap_asm_savemm + 16]
+	movq mm3, qword ptr [_voxlap_asm_savemm + 24]
+	movq mm4, qword ptr [_voxlap_asm_savemm + 32]
+	movq mm5, qword ptr [_voxlap_asm_savemm + 40]
+	movq mm6, qword ptr [_voxlap_asm_savemm + 48]
+	movq mm7, qword ptr [_voxlap_asm_savemm + 56]
 ENDIF
 
 	jmp skipixy2
