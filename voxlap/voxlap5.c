@@ -7624,9 +7624,10 @@ ray3d unproject2d(float px, float py) {
 	return ray;
 }
 
-static int64_t mskp255 = 0x00ff00ff00ff00ff;
-static int64_t mskn255 = 0xff01ff01ff01ff01;
-static int64_t rgbmask64 = 0xffffff00ffffff;
+/* mskp255/mskn255/rgbmask64 were 8-byte constants used by drawtile's
+ * MMX alpha-blend setup (pcmpeqw against ±255 corner cases, pand to
+ * mask alpha out of the screen pixel before blending). Removed in
+ * Stage 4.7 along with that asm. */
 
 	//(tf,tp,tx,ty,tcx,tcy): Tile source, (tcx&tcy) is texel (<<16) at (sx,sy)
 	//(sx,sy,xz,yz) screen coordinates and x&y zoom, all (<<16)
@@ -7636,7 +7637,7 @@ void drawtile (int32_t tf, int32_t tp, int32_t tx, int32_t ty, int32_t tcx, int3
 					int32_t sx, int32_t sy, int32_t xz, int32_t yz, int32_t black, int32_t white)
 {
 	int32_t sx0, sy0, sx1, sy1, x0, y0, x1, y1, x, y, u, v, ui, vi, uu, vv;
-	int32_t p, i, j, a;
+	int32_t p, i, j;
 
 	if (!tf) return;
 	sx0 = sx - mulshr16(tcx,xz); sx1 = sx0 + xz*tx;
@@ -7647,178 +7648,117 @@ void drawtile (int32_t tf, int32_t tp, int32_t tx, int32_t ty, int32_t tcx, int3
 	vi = shldiv16(65536,yz); v = mulshr16(-sy0,vi);
 	if (!((black^white)&0xff000000)) //Ignore alpha
 	{
-			//for(y=y0,vv=y*vi+v;y<y1;y++,vv+=vi)
-			//{
-			//   p = ylookup[y] + frameplace; j = (vv>>16)*tp + tf;
-			//   for(x=x0,uu=x*ui+u;x<x1;x++,uu+=ui)
-			//      *(int32_t *)((x<<2)+p) = *(int32_t *)(((uu>>16)<<2) + j);
-			//}
 		if ((xz == 32768) && (yz == 32768))
 		{
+			/* 2× downscale: each output pixel is the byte-wise rounded
+			 * average of a 2×2 source block. Original was an MMX
+			 * pavgb/pshufw/pavgb chain across two 8-byte loads. */
 			int32_t plc;
 			for(y=y0,vv=y*vi+v;y<y1;y++,vv+=vi)
 			{
 				p = ylookup[y] + frameplace;
 				plc = (((x0*ui+u)>>16)<<2) + (vv>>16)*tp + tf;
-				_asm
-				{
-					push ebx
-					mov eax, x1
-					mov ebx, p
-					lea ebx, [ebx+eax*4]
-					sub eax, x0
-					mov ecx, plc
-					lea ecx, [ecx+eax*8]
-					mov edx, tp
-					add edx, ecx
-					neg eax
-						;eax: x0-x1
-						;ebx: p + x1*4
-						;ecx: plc + (x1-x0)*8
-						;edx: plc + (x1-x0)*8 + tp
-	  begdthalf:movq mm0, [eax*8+ecx]   ;mm0: A1R1G1B1 A0R0G0B0
-					pavgb mm0, [eax*8+edx]  ;mm0: A1R1G1B1 A0R0G0B0
-					pshufw mm1, mm0, 0xe    ;mm1: ???????? A1R1G1B1
-					pavgb mm0, mm1          ;mm1: ???????? AaRrGgBb
-					movd [eax*4+ebx], mm0
-					inc eax
-					jnz short begdthalf
-					pop ebx
+				for (x = x0; x < x1; x++) {
+					int32_t k = x - x0;
+					uint32_t ta = *(uint32_t *)(plc + k*8);
+					uint32_t tb = *(uint32_t *)(plc + k*8 + 4);
+					uint32_t ba = *(uint32_t *)(plc + k*8 + tp);
+					uint32_t bb = *(uint32_t *)(plc + k*8 + tp + 4);
+					uint32_t out = 0;
+					int b;
+					for (b = 0; b < 4; b++) {
+						uint32_t va = (ta >> (b*8)) & 0xffu;
+						uint32_t vb = (tb >> (b*8)) & 0xffu;
+						uint32_t va_avg = (va + vb + 1u) >> 1;
+						uint32_t v2a = (ba >> (b*8)) & 0xffu;
+						uint32_t v2b = (bb >> (b*8)) & 0xffu;
+						uint32_t vb_avg = (v2a + v2b + 1u) >> 1;
+						uint32_t avg2 = (va_avg + vb_avg + 1u) >> 1;
+						out |= avg2 << (b*8);
+					}
+					*(int32_t *)(p + x*4) = (int32_t)out;
 				}
 			}
-			_mm_empty();
 		}
 		else
 		{
+			/* Texture-stretch blit. */
 			int32_t plc = x0*ui+u;
 			for(y=y0,vv=y*vi+v;y<y1;y++,vv+=vi)
 			{
 				p = ylookup[y] + frameplace; j = (vv>>16)*tp + tf;
-
-					//for(x=x0,uu=plc;x<x1;x++,uu+=ui)
-					//   *(int32_t *)((x<<2)+p) = *(int32_t *)(((uu>>16)<<2) + j);
-				_asm
-				{
-					push ebx
-					push esi
-					push edi
-					mov edi, x1
-					mov edx, x0
-					cmp edx, edi
-					jge short enddtnhalf
-					mov eax, p
-					mov esi, ui
-					mov ecx, plc
-					mov ebx, j
-					sub edx, edi
-					lea edi, [edi*4+eax]
-begdtnhalf:
-#if 0
-					mov eax, ecx          ;simple loop
-					shr eax, 16
-					mov eax, [eax*4+ebx]
-					add ecx, esi
-					mov [edx*4+edi], eax
-					add edx, 1
-					jnz short begdtnhalf
-#else
-					lea eax, [ecx+esi]    ;unrolled once loop; uses movntq
-					shr ecx, 16
-					add edx, 1
-					movd mm0, [ecx*4+ebx]
-					lea ecx, [eax+esi]
-					jz short preenddtnhalf
-					shr eax, 16
-					punpckldq mm0, [eax*4+ebx]
-					movntq [edx*4+edi-4], mm0
-					add edx, 1
-					jnz short begdtnhalf
-					jmp short enddtnhalf
-preenddtnhalf: movd [edx*4+edi-4], mm0
-#endif
-enddtnhalf:    pop edi
-					pop esi
-					pop ebx
-				}
+				for (x = x0, uu = plc; x < x1; x++, uu += ui)
+					*(int32_t *)((x<<2)+p) = *(int32_t *)(((uu>>16)<<2) + j);
 			}
-			_mm_empty();
 		}
 	}
 	else //Use alpha for masking
 	{
-			//Init for black/white code
-		_asm
-		{
-			pxor mm7, mm7
-			movd mm5, white
-			movd mm4, black
-			punpcklbw mm5, mm7   ;mm5: [00Wa00Wr00Wg00Wb]
-			punpcklbw mm4, mm7   ;mm4: [00Ba00Br00Bg00Bb]
-			psubw mm5, mm4       ;mm5: each word range: -255 to 255
-			movq mm0, mm5        ;if (? == -255) ? = -256;
-			movq mm1, mm5        ;if (? ==  255) ? =  256;
-			pcmpeqw mm0, mskp255 ;if (mm0.w[#] == 0x00ff) mm0.w[#] = 0xffff
-			pcmpeqw mm1, mskn255 ;if (mm1.w[#] == 0xff01) mm1.w[#] = 0xffff
-			psubw mm5, mm0
-			paddw mm5, mm1
-			psllw mm5, 4         ;mm5: [-WBa-WBr-WBg-WBb]
-			movq mm6, rgbmask64
+		/* Per-channel (white-black) scale, with ±255 → ±256 corner-case
+		 * adjustment + <<4 so the pmulhw-equivalent is a 16×16→hi-16
+		 * multiply that yields byte/256 scaled output cleanly. */
+		int16_t bw_scale[4];
+		int32_t bk[4];
+		int b;
+		for (b = 0; b < 4; b++) {
+			int32_t bl = (black >> (b*8)) & 0xff;
+			int32_t wh = (white >> (b*8)) & 0xff;
+			int32_t diff = wh - bl;
+			if (diff ==  255) diff =  256;
+			else if (diff == -255) diff = -256;
+			bw_scale[b] = (int16_t)(diff << 4);
+			bk[b] = bl;
 		}
+
 		for(y=y0,vv=y*vi+v;y<y1;y++,vv+=vi)
 		{
 			p = ylookup[y] + frameplace; j = (vv>>16)*tp + tf;
 			for(x=x0,uu=x*ui+u;x<x1;x++,uu+=ui)
 			{
+				/* Color-modulate source pixel: i.byte = i.byte*(W-B)/256 + B
+				 * Keep the 16-bit-per-channel intermediate (mod_word) so the
+				 * subsequent alpha blend can use it before packuswb saturation. */
+				int16_t mod_word[4];
+				int32_t r;
+				int32_t alpha_shifted;
+				int32_t isat = 0;
 				i = *(int32_t *)(((uu>>16)<<2) + j);
-
-				_asm
-				{
-						;                (mm5)              (mm4)
-						;i.a = i.a*(white.a-black.a)/256 + black.a
-						;i.r = i.r*(white.r-black.r)/256 + black.r
-						;i.g = i.g*(white.g-black.g)/256 + black.g
-						;i.b = i.b*(white.b-black.b)/256 + black.b
-					movd mm0, i           ;mm1: [00000000AaRrGgBb]
-					punpcklbw mm0, mm7    ;mm1: [00Aa00Rr00Gg00Bb]
-					psllw mm0, 4          ;mm1: [0Aa00Rr00Gg00Bb0]
-					pmulhw mm0, mm5       ;mm1: [--Aa--Rr--Gg--Bb]
-					paddw mm0, mm4        ;mm1: [00Aa00Rr00Gg00Bb]
-					movq mm1, mm0
-					packuswb mm0, mm0     ;mm1: [AaRrGgBbAaRrGgBb]
-					movd i, mm0
+				for (b = 0; b < 4; b++) {
+					int32_t byte = (i >> (b*8)) & 0xff;
+					int32_t prod = ((byte << 4) * bw_scale[b]) >> 16;
+					mod_word[b] = (int16_t)(prod + bk[b]);
+					r = mod_word[b];
+					if (r < 0)   r = 0;
+					if (r > 255) r = 255;
+					isat |= (r & 0xff) << (b*8);
 				}
+				i = isat;
 
-					//a = (((uint32_t)i)>>24);
-					//if (!a) continue;
-					//if (a == 255) { *(int32_t *)((x<<2)+p) = i; continue; }
 				if ((uint32_t)(i+0x1000000) < 0x2000000)
 				{
 					if (i < 0) *(int32_t *)((x<<2)+p) = i;
 					continue;
 				}
-				_asm
+
+				/* Alpha blend: dst.byte = clamp((mod-dst)*alpha/256 + dst, 0, 255).
+				 * Original asm: psubw, psllw 4, pshufw alpha, pmulhw, paddw, packuswb. */
 				{
-					mov eax, x            ;mm0 = (mm1-mm0)*a + mm0
-					mov edx, p
-					lea eax, [eax*4+edx]
-					movd mm0, [eax]       ;mm0: [00000000AaRrGgBb]
-					;movd mm1, i           ;mm1: [00000000AaRrGgBb]
-					pand mm0, mm6         ;zero alpha from screen pixel
-					punpcklbw mm0, mm7    ;mm0: [00Aa00Rr00Gg00Bb]
-					;punpcklbw mm1, mm7    ;mm1: [00Aa00Rr00Gg00Bb]
-					psubw mm1, mm0        ;mm1: [--Aa--Rr--Gg--Bb] range:+-255
-					psllw mm1, 4          ;mm1: [-Aa0-Rr0-Gg0-Bb0]
-					pshufw mm2, mm1, 0xff ;mm2: [-Aa0-Aa0-Aa0-Aa0]
-					pmulhw mm1, mm2
-					;mov edx, a            ;alphalookup[i] = i*0x001000100010;
-					;pmulhw mm1, alphalookup[edx*8]
-					paddw mm0, mm1
-					packuswb mm0, mm0
-					movd [eax], mm0
+					uint32_t dst = *(uint32_t *)((x<<2)+p) & 0x00ffffffu;
+					uint32_t blended = 0;
+					alpha_shifted = (int32_t)mod_word[3] << 4;
+					for (b = 0; b < 4; b++) {
+						int32_t screen_byte = (dst >> (b*8)) & 0xff;
+						int32_t delta = mod_word[b] - screen_byte;
+						int32_t scaled = ((delta << 4) * alpha_shifted) >> 16;
+						r = scaled + screen_byte;
+						if (r < 0)   r = 0;
+						if (r > 255) r = 255;
+						blended |= ((uint32_t)r) << (b*8);
+					}
+					*(uint32_t *)((x<<2)+p) = blended;
 				}
 			}
 		}
-		_mm_empty();
 	}
 }
 
