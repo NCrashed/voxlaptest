@@ -160,6 +160,55 @@ jobs:
             build/oracle-run/hashes.txt
             build/oracle-run/*.png
 
+  windows-msvc-x86-trace-asm:
+    # Stage 4.5b.7e (H4): build with TRACE on but no SCALAR_GROUSCAN /
+    # no USEV5ASM_FALLBACK, so gline calls into the actual asm
+    # grouscanasm. Only the entry trace at gline (line 1255-area)
+    # compiles in this configuration — the L/W/X/K events are gated
+    # by VOXLAP_SCALAR_GROUSCAN or USEV5ASM=0. The resulting
+    # trace_high_down.log contains only E (entry) records, which is
+    # exactly what we need for H4: bit-compare cx0/cy0/cx1/cy1/gpz/
+    # gdz/gxmax/gi0/gi1 between the asm-trace and scalar-trace logs
+    # at the same call counter. If they differ, the bug cascades
+    # from float rounding (x87 vs SSE) in gline init despite the
+    # init code being shared C source. If identical, H4 falsified.
+    name: Windows MSVC x86 asm+trace (4.5b.7e H4 non-fatal)
+    runs-on: windows-2022
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSVC x86 dev environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Configure (Ninja, Release, asm path + TRACE)
+        shell: cmd
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DVOXLAP_GROUSCAN_TRACE=ON
+      - name: Build
+        shell: cmd
+        run: cmake --build build
+      - name: Run oracle
+        shell: cmd
+        working-directory: build\oracle-run
+        run: ..\bin\oracle.exe
+      - name: Trace head + size
+        shell: bash
+        run: |
+          ls -la build/oracle-run/
+          echo "--- trace_high_down.log first 20 lines ---"
+          head -20 build/oracle-run/trace_high_down.log || true
+          echo "--- trace_high_down.log last 5 lines ---"
+          tail -5 build/oracle-run/trace_high_down.log || true
+      - name: Upload trace + PNGs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-windows-msvc-x86-trace-asm
+          path: |
+            build/oracle-run/hashes.txt
+            build/oracle-run/trace_*.log
+            build/oracle-run/*.png
+
   windows-msvc-x86-trace-scalar:
     # Stage 4.5b.7b: build with VOXLAP_SCALAR_GROUSCAN=ON +
     # VOXLAP_GROUSCAN_TRACE=ON. The oracle opens trace_high_down.log
