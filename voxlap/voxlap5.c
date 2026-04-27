@@ -1950,6 +1950,35 @@ void vrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
 	}
 }
 
+void vrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
+{
+	/* Portable scalar replacement; see hrendzfogsse for the fog-blend
+	 * formulation, vrendzsse for the per-pixel uurend handling. */
+	int32_t i, k, l, p0;
+	float dirx, diry;
+	p0 = ylookup[sy] + (sx<<2) + frameplace;
+	p1 = ylookup[sy] + (p1<<2) + frameplace;
+	dirx = optistrx*(float)sx + optiheix*(float)sy + optiaddx;
+	diry = optistry*(float)sx + optiheiy*(float)sy + optiaddy;
+	i = zbufoff;
+	while (p0 < p1) {
+		k = angstart[uurend[sx]>>16][iplc].col;
+		l = angstart[uurend[sx]>>16][iplc].dist;
+		l = (foglut[l>>20] & 32767);
+		*(int32_t *)p0 =  ((((( vx5.fogcol     &255)-( k     &255))*l)>>15)    )
+		               + ((((((vx5.fogcol>> 8)&255)-((k>> 8)&255))*l)>>15)<< 8)
+		               + ((((((vx5.fogcol>>16)&255)-((k>>16)&255))*l)>>15)<<16)
+		               + k;
+		*(float *)(p0+i) = (float)angstart[uurend[sx]>>16][iplc].dist
+		                 / sqrtf(dirx*dirx + diry*diry);
+		dirx += optistrx;
+		diry += optistry;
+		uurend[sx] += uurend[sx+MAXXDIM];
+		p0 += 4;
+		iplc += iinc;
+		sx++;
+	}
+}
 
 #endif
 
