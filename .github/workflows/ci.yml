@@ -88,8 +88,12 @@ jobs:
         run: cmake --build build
 
   macos-clang:
-    name: macOS Clang (CMake configure + build)
-    runs-on: macos-latest
+    name: macOS Clang x86_64 (CMake configure + build)
+    # Pinned to macos-13 (last x86_64 runner). voxlap5.c uses
+    # <xmmintrin.h> + <mmintrin.h> intrinsics in 170+ places — porting
+    # them to NEON is a follow-up effort; until then macos-latest
+    # (Apple Silicon) doesn't have the headers and the build hard-errors.
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
