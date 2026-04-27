@@ -1867,9 +1867,10 @@ static int32_t ofogdist = -1;
 extern "C" {
 #endif
 /* Stage 4.6: 5 × point4d scratch table moved out of v5.asm
- * (originally `_opti4asm dd 5*4 dup(0)`). Used by the SSE2 inline asm
- * in vrendzsse / hrendzsse / fogvrendzsse / foghrendzsse below. */
-int32_t opti4asm[5*4];
+ * (originally `_opti4asm dd 5*4 dup(0)` with ALIGN 16). The SSE2
+ * inline asm below uses `movaps xmm?, opti4asm[k*16]` which requires
+ * 16-byte alignment — preserved here via __declspec(align(16)). */
+__declspec(align(16)) int32_t opti4asm[5*4];
 #define opti4 ((point4d *)&opti4asm[0])
 #ifdef __cplusplus
 }
@@ -8971,6 +8972,9 @@ kv6data *getkv6 (const char *filnam)
  *   _kv6coladd dq 0                   ; one qword (C side declares [256])
  * MSVC inline asm in this file references these by their unmangled C
  * names (no leading underscore in C source); the linker pairs them. */
+#ifndef MAXZSIZ
+#define MAXZSIZ 1024  /* matches the asm's MAXZSIZ EQU 1024 */
+#endif
 #ifdef __cplusplus
 extern "C" {
 #endif
