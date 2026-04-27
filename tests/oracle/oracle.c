@@ -65,12 +65,33 @@ static vx5sprite g_sprite;
  * port progresses. */
 static vx5sprite g_coco_sprite;
 
+/* Procedural test tile used by the drawtile_* oracle poses. 16×16 ARGB
+ * with brightness 0x80 throughout: a 2×2-checkered red/green pattern
+ * with a yellow diagonal cross in the centre 4 pixels. Hand-built so
+ * the post-blit hashes pin every byte that drawtile touches. */
+enum { TILE_SIZE = 16 };
+static int32_t g_tile[TILE_SIZE * TILE_SIZE];
+
 static uint64_t fnv1a64(const void *data, size_t n) {
 	const uint8_t *p = (const uint8_t *)data;
 	uint64_t h = 0xcbf29ce484222325ULL;
 	size_t i;
 	for (i = 0; i < n; i++) { h ^= p[i]; h *= 0x100000001b3ULL; }
 	return h;
+}
+
+static void build_test_tile(void) {
+	int32_t x, y;
+	for (y = 0; y < TILE_SIZE; y++) {
+		for (x = 0; x < TILE_SIZE; x++) {
+			int32_t cx = x - TILE_SIZE/2, cy = y - TILE_SIZE/2;
+			int32_t argb;
+			if ((cx == 0) || (cy == 0))            argb = (int32_t)BR(0xffd050); /* yellow cross */
+			else if ((((x>>1) ^ (y>>1)) & 1) == 0) argb = (int32_t)BR(0xc03030); /* red */
+			else                                   argb = (int32_t)BR(0x30c030); /* green */
+			g_tile[y*TILE_SIZE + x] = argb;
+		}
+	}
 }
 
 static void build_scene(void) {
@@ -253,32 +274,47 @@ struct pose {
 	int32_t lit;       /* 1 = bake lightmode-2 lighting into voxel intensities
 	                    *     before this pose's render. Bake is one-shot
 	                    *     (subsequent poses keep the lit voxel state). */
+	int32_t tile;      /* drawtile coverage:
+	                    *   0 = no tile overlay
+	                    *   1 = 1× zoom, alpha-disabled (texture-stretch path
+	                    *       with black==white triggering ignore-alpha)
+	                    *   2 = 0.5× zoom (the 32768/32768 fast 2×2-average
+	                    *       downsample path)
+	                    *   3 = 1.5× zoom + alpha-blend (texture-stretch +
+	                    *       per-channel modulate + per-pixel blend) */
 };
 
 int main(void) {
 	static const struct pose poses[] = {
-		{"north",          1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0, NULL,            0},
-		{"east",           1024.0, 1024.0, 128.0, 0.0,                0.0, NULL,            0},
-		{"diag_down",      1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL,            0},
-		{"high_down",      1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7, NULL,            0},
+		{"north",          1024.0, 1024.0, 128.0, 1.5707963267948966, 0.0, NULL,            0, 0},
+		{"east",           1024.0, 1024.0, 128.0, 0.0,                0.0, NULL,            0, 0},
+		{"diag_down",      1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL,            0, 0},
+		{"high_down",      1024.0, 1024.0,  90.0, 1.5707963267948966, 0.7, NULL,            0, 0},
 		/* Sprite poses: camera aimed at g_sprite at (1050, 1050, 175).
 		 * front: eye-level, looking at sprite along +x.
 		 * above: slightly in front, pitched steeply toward the sprite.
 		 * iso:   diagonal approach, mild pitch. */
-		{"sprite_front",   1020.0, 1050.0, 175.0, 0.0,                0.0, &g_sprite,       0},
-		{"sprite_above",   1050.0, 1050.0, 150.0, 0.0,                1.3, &g_sprite,       0},
-		{"sprite_iso",     1020.0, 1020.0, 160.0, 0.7853981633974483, 0.4, &g_sprite,       0},
+		{"sprite_front",   1020.0, 1050.0, 175.0, 0.0,                0.0, &g_sprite,       0, 0},
+		{"sprite_above",   1050.0, 1050.0, 150.0, 0.0,                1.3, &g_sprite,       0, 0},
+		{"sprite_iso",     1020.0, 1020.0, 160.0, 0.7853981633974483, 0.4, &g_sprite,       0, 0},
 		/* External KVX sprite (g_coco_sprite at (1110, 1080, 175),
 		 * rotated 120° about Z), viewed isometrically from SW. The
 		 * iso angle + non-axis-aligned model orientation together
 		 * exercise the rotated drawsprite path (drawboundcube_*). */
-		{"sprite_coco",    1080.0, 1050.0, 160.0, 0.7853981633974483, 0.4, &g_coco_sprite,  0},
+		{"sprite_coco",    1080.0, 1050.0, 160.0, 0.7853981633974483, 0.4, &g_coco_sprite,  0, 0},
 		/* Variant of diag_down with lightmode-2 baking enabled, so
 		 * voxel intensities reflect a single point light at
 		 * (1100, 1100, 70) — top faces brighter than walls/floor.
 		 * MUST come after every unlit pose (the bake mutates the
 		 * world voxel intensities and persists across renders). */
-		{"diag_down_lit",  1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL,            1},
+		{"diag_down_lit",  1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL,            1, 0},
+		/* drawtile coverage. All 3 use diag_down's camera so the
+		 * underlying scene render is identical across them — the
+		 * hash difference comes purely from the post-opticast
+		 * drawtile call. */
+		{"tile_1x",        1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL,            0, 1},
+		{"tile_half",      1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL,            0, 2},
+		{"tile_blend",     1000.0, 1000.0, 110.0, 0.7853981633974483, 0.4, NULL,            0, 3},
 	};
 	const size_t N = sizeof(poses) / sizeof(poses[0]);
 	size_t i;
@@ -288,6 +324,7 @@ int main(void) {
 	if (initvoxlap() < 0) { fprintf(stderr, "initvoxlap failed\n"); return 1; }
 
 	build_scene();
+	build_test_tile();
 	voxsetframebuffer((intptr_t)g_fb, BYTESPERLINE, XRES, YRES);
 
 	hf = fopen("hashes.txt", "w");
@@ -320,6 +357,43 @@ int main(void) {
 
 		opticast();
 		if (poses[i].sprite) drawsprite(poses[i].sprite);
+
+		/* drawtile coverage: overlay the procedural test tile. The
+		 * three flag values exercise all three drawtile code paths
+		 * (32768-zoom 2×2 averaging, generic texture stretch, and the
+		 * alpha-blend modulate-then-blend path). Tile is anchored at
+		 * its centre via tcx=tcy=8<<16 (= centre of the 16×16 tile),
+		 * placed at screen (320, 240) (= centre of the 640×480 fb). */
+		switch (poses[i].tile) {
+		case 1:
+			/* 1× zoom, alpha disabled (black==white triggers ignore-alpha). */
+			drawtile((int32_t)(intptr_t)g_tile, TILE_SIZE * 4,
+			         TILE_SIZE, TILE_SIZE, 8 << 16, 8 << 16,
+			         320 << 16, 240 << 16,
+			         1 << 16, 1 << 16,
+			         (int32_t)BR(0x000000), (int32_t)BR(0x000000));
+			break;
+		case 2:
+			/* 0.5× zoom (xz=yz=32768) — fast 2×2 averaging path. */
+			drawtile((int32_t)(intptr_t)g_tile, TILE_SIZE * 4,
+			         TILE_SIZE, TILE_SIZE, 8 << 16, 8 << 16,
+			         320 << 16, 240 << 16,
+			         32768, 32768,
+			         (int32_t)BR(0x000000), (int32_t)BR(0x000000));
+			break;
+		case 3:
+			/* 1.5× zoom + alpha modulate-and-blend path. black/white
+			 * differ in alpha (0x40 vs 0xc0), so the alpha branch fires;
+			 * the 0x40-vs-0xc0 channel spread tints the tile cyan-ward. */
+			drawtile((int32_t)(intptr_t)g_tile, TILE_SIZE * 4,
+			         TILE_SIZE, TILE_SIZE, 8 << 16, 8 << 16,
+			         320 << 16, 240 << 16,
+			         (3 << 16) / 2, (3 << 16) / 2,
+			         (int32_t)0x40103060, (int32_t)0xc0e0a0c0);
+			break;
+		default:
+			break;
+		}
 
 		h = fnv1a64(g_fb, sizeof(g_fb));
 		fprintf(hf,     "%s  %016llx\n", poses[i].name, (unsigned long long)h);
