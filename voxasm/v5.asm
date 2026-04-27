@@ -23,12 +23,13 @@ EXTRN _skyxsiz : dword  ;Size of longitude line
 EXTRN _skylat : dword   ;long[_skyxsiz] : latitude's unit dir. vector
 
 IFDEF VOXLAP_GROUSCAN_TRACE
-;Stage 4.5b.7h (H5): asm-side trace hook globals + entry point.
+;Stage 4.5b.7h-l (H5/H6): asm-side trace hook globals + entry points.
 ;Defined in voxlap5.c under #ifdef VOXLAP_GROUSCAN_TRACE.
 EXTRN _voxlap_asm_oldebp : dword
 EXTRN _voxlap_asm_savemm : qword
 EXTRN _voxlap_asm_save_cfasmesp : dword
 EXTRN _voxlap_trace_asm_kstep : NEAR
+EXTRN _voxlap_trace_asm_remip : NEAR
 ENDIF
 
 ;How to declare C-ASM shared variables in the ASM code:
@@ -705,6 +706,52 @@ skipngxmax2:
 	mov edi, [esi]
 
 	mov esp, ce
+
+IFDEF VOXLAP_GROUSCAN_TRACE
+	;H6 (Stage 4.5b.7l): post-mip-transition trace hook. Same dance
+	;as the Kstep hook — save MMX, switch ESP to espbak (real OS
+	;stack), PUSHAD/POPAD around the cdecl call. State captured from
+	;globals (gmipcnt, gpz, gdz, ngxmax) so it reflects the final
+	;values after this remiporend run.
+	movq qword ptr [_voxlap_asm_savemm + 0],  mm0
+	movq qword ptr [_voxlap_asm_savemm + 8],  mm1
+	movq qword ptr [_voxlap_asm_savemm + 16], mm2
+	movq qword ptr [_voxlap_asm_savemm + 24], mm3
+	movq qword ptr [_voxlap_asm_savemm + 32], mm4
+	movq qword ptr [_voxlap_asm_savemm + 40], mm5
+	movq qword ptr [_voxlap_asm_savemm + 48], mm6
+	movq qword ptr [_voxlap_asm_savemm + 56], mm7
+	emms
+
+	mov dword ptr [_voxlap_asm_save_cfasmesp], esp
+	mov esp, dword ptr espbak
+
+	pushad
+
+	push dword ptr ngxmax                       ;arg 6: ngxmax
+	push dword ptr _gdz[4]                       ;arg 5: gdz1
+	push dword ptr _gdz[0]                       ;arg 4: gdz0
+	push dword ptr _gpz[4]                       ;arg 3: gpz1
+	push dword ptr _gpz[0]                       ;arg 2: gpz0
+	movzx eax, byte ptr gmipcnt
+	push eax                                    ;arg 1: gmipcnt (zero-extended)
+	call _voxlap_trace_asm_remip
+	add esp, 24                                 ;6 args * 4 bytes
+
+	popad
+
+	mov esp, dword ptr [_voxlap_asm_save_cfasmesp]
+
+	movq mm0, qword ptr [_voxlap_asm_savemm + 0]
+	movq mm1, qword ptr [_voxlap_asm_savemm + 8]
+	movq mm2, qword ptr [_voxlap_asm_savemm + 16]
+	movq mm3, qword ptr [_voxlap_asm_savemm + 24]
+	movq mm4, qword ptr [_voxlap_asm_savemm + 32]
+	movq mm5, qword ptr [_voxlap_asm_savemm + 40]
+	movq mm6, qword ptr [_voxlap_asm_savemm + 48]
+	movq mm7, qword ptr [_voxlap_asm_savemm + 56]
+ENDIF
+
 	jmp skipixy2
 
 startsky:

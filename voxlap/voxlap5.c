@@ -342,6 +342,21 @@ void voxlap_trace_asm_kstep (int32_t wlane, int32_t lane,
                 (unsigned)gpz0, (unsigned)gpz1, v);
     }
 }
+
+/* H6: remiporend exit hook. Logs the post-mip-transition state so we
+ * can compare asm vs scalar after each remiporend run. Bail paths
+ * (goto startsky from gmipcnt or ngxmax checks) are observable by
+ * absence of subsequent Ksteps in the call. */
+void voxlap_trace_asm_remip (int32_t gmipcnt,
+                              int32_t gpz0, int32_t gpz1,
+                              int32_t gdz0, int32_t gdz1,
+                              int32_t ngxmax) {
+    if (vlt_fp) {
+        VLT_RAW("Kremip gmipcnt=%d gpz0=%08x gpz1=%08x gdz0=%08x gdz1=%08x ngxmax=%08x",
+                gmipcnt, (unsigned)gpz0, (unsigned)gpz1,
+                (unsigned)gdz0, (unsigned)gdz1, (unsigned)ngxmax);
+    }
+}
 #endif
 
 #define gi0 (((int32_t *)&gi)[0])
@@ -13360,6 +13375,12 @@ remiporend:
 		/* Reset current c to the top of the stack. */
 		c = ce;
 	}
+#ifdef VOXLAP_GROUSCAN_TRACE
+	/* H6: log post-mip-transition state for asm vs scalar comparison. */
+	VLT_RAW("Kremip gmipcnt=%d gpz0=%08x gpz1=%08x gdz0=%08x gdz1=%08x ngxmax=%08x",
+	        gmipcnt, (unsigned)gpz[0], (unsigned)gpz[1],
+	        (unsigned)gdz[0], (unsigned)gdz[1], (unsigned)ngxmax);
+#endif
 	goto skipixy2_sync_from_presync;
 
 startsky:
