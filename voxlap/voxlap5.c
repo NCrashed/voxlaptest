@@ -11506,32 +11506,18 @@ void updatelighting (int32_t x0, int32_t y0, int32_t z0, int32_t x1, int32_t y1,
 									g = fx*fx+fy*fy+fz*fz; if (g >= vx5.lightsrc[j].r2) continue;
 
 										//g = 1.0/(g*sqrt(g))-lightsub[i]; //1.0/g;
-									if (cputype&(1<<25))
+									/* Original had two asm variants: SSE (rcpss/rsqrtss/
+									 * mulss/subss) and 3DNow (pfrcp/pfrsqrt/pfmul/pfsub),
+									 * dispatched on cputype&(1<<25). Stage 4 decision-2
+									 * dropped 3DNow; SSE is baseline. The intrinsic form
+									 * below emits the same SSE rcpss/rsqrtss sequence. */
 									{
-										_asm
-										{
-											movss xmm0, g        ;xmm0=g
-											rcpss xmm1, xmm0     ;xmm1=1/g
-											rsqrtss xmm0, xmm0   ;xmm0=1/sqrt(g)
-											mulss xmm1, xmm0     ;xmm1=1/(g*sqrt(g))
-											mov eax, i
-											subss xmm1, lightsub[eax*4]
-											movss g, xmm1
-										}
-									}
-									else
-									{
-										_asm
-										{
-											movd mm0, g
-											pfrcp mm1, mm0
-											pfrsqrt mm0, mm0
-											pfmul mm0, mm1
-											mov eax, i
-											pfsub mm0, lightsub[eax*4]
-											movd g, xmm0
-											femms
-										}
+										__m128 xg = _mm_set_ss(g);
+										__m128 xrcp   = _mm_rcp_ss(xg);
+										__m128 xrsqrt = _mm_rsqrt_ss(xg);
+										__m128 xres   = _mm_sub_ss(_mm_mul_ss(xrcp, xrsqrt),
+										                            _mm_load_ss(&lightsub[i]));
+										g = _mm_cvtss_f32(xres);
 									}
 									f -= g*h*vx5.lightsrc[j].sc;
 								}
@@ -12045,39 +12031,32 @@ void voxsetframebuffer (intptr_t p, int32_t b, int32_t x, int32_t y)
 		{
 			ofogdist = vx5.maxscandist;
 
-			//foglut[?>>20] = min(?*32767/vx5.maxscandist,32767)
-#if 0
-			int32_t j, k, l;
-			j = 0; l = 0x7fffffff/vx5.maxscandist;
-			for(i=0;i<2048;i++)
+			/* Fog falloff table: foglut[k] = repeated-4-int16 packing of
+			 * `(k * (0x7fffffff / maxscandist)) >> 16`, saturated at 32767.
+			 *
+			 * Original implementation was an MMX inline-asm loop that
+			 * walked `eax += i; jo → fallback` for overflow detection.
+			 * The dead `#if 0` C variant above the `#else` was buggy
+			 * (it wrote one extra wraparound entry before breaking);
+			 * this port matches the asm exactly: capture acc → check
+			 * overflow → write only on success, then pad with
+			 * all32767. */
 			{
-				k = (j>>16); j += l;
-				if (k < 0) break;
-				foglut[i] = (((int64_t)k)<<32)+(((int64_t)k)<<16)+((int64_t)k);
+				const int32_t step = 0x7fffffff / vx5.maxscandist;
+				int32_t acc = 0;
+				int32_t j;
+				for (j = 0; j < 2048; j++) {
+					int32_t next = acc + step;
+					if (next < acc) break;     /* overflow → skip write, pad */
+					uint16_t hi16 = (uint16_t)((uint32_t)acc >> 16);
+					foglut[j] = ((int64_t)hi16 << 48)
+					          | ((int64_t)hi16 << 32)
+					          | ((int64_t)hi16 << 16)
+					          |  (int64_t)hi16;
+					acc = next;
+				}
+				while (j < 2048) foglut[j++] = all32767;
 			}
-			while (i < 2048) foglut[i++] = all32767;
-#else
-			i = 0x7fffffff/vx5.maxscandist;
-			_asm
-			{
-				xor eax, eax
-				mov ecx, -2048*8
-				mov edx, i
-fogbeg:     movd mm0, eax
-				add eax, edx
-				jo short fogend
-				pshufw mm0, mm0, 0x55
-				movq foglut[ecx+2048*8], mm0
-				add ecx, 8
-				js short fogbeg
-				jmp short fogend2
-fogend:     movq mm0, all32767
-fogbeg2:    movq foglut[ecx+2048*8], mm0
-				add ecx, 8
-				js short fogbeg2
-fogend2:    emms
-			}
-#endif
 		}
 	} else ofogdist = -1;
 
@@ -12266,20 +12245,6 @@ static int32_t getcputype ()
 	if (i&(1<<25)) i |= (1<<22); //SSE implies MMX+ support
 	return(i);
 }
-
-#if 0
-  //This doesn't speed it up and it only makes it crash on some computers :/
-static _inline void fixsse ()
-{
-	static int32_t asm32;
-	_asm
-	{
-		stmxcsr [asm32]  ;Default is:0x1f80
-		or asm32, 0x8040 ;enable ftz&daz to prevent slow denormals!
-		ldmxcsr [asm32]
-	}
-}
-#endif
 
 void freekv6 (kv6data *kv6)
 {
