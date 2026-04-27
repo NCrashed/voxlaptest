@@ -1918,14 +1918,17 @@ void hrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr, i
 	 * which is more accurate but slower and bit-different. SSE was
 	 * also unrolled by 4 with non-temporal stores; that perf is
 	 * deferred (per the Rust+SSE follow-up plan). */
-	int32_t p0, i;
+	/* p0 / pe carry framebuffer addresses derived from frameplace and
+	 * must be pointer-width; p1 (param) is still the int column index. */
+	intptr_t p0, pe;
+	int32_t i;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
-	p1 = ylookup[sy] + (p1<<2) + frameplace;
+	pe = ylookup[sy] + (p1<<2) + frameplace;
 	dirx = optistrx*(float)sx + optiheix*(float)sy + optiaddx;
 	diry = optistry*(float)sx + optiheiy*(float)sy + optiaddy;
 	i = zbufoff;
-	while (p0 != p1) {
+	while (p0 != pe) {
 		*(int32_t *)p0 = angstart[plc>>16][j].col;
 		*(float *)(p0+i) = (float)angstart[plc>>16][j].dist
 		                 / sqrtf(dirx*dirx + diry*diry);
@@ -1941,14 +1944,15 @@ void hrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr
 	/* Portable scalar replacement; see hrendzsse for SSE-deferral note.
 	 * Per-pixel fog blend matches the (col*l + (fogcol-col)*l)>>15 form
 	 * the asm derived from `pmulhw mm1, foglut`. */
-	int32_t p0, i, k, l;
+	intptr_t p0, pe;
+	int32_t i, k, l;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
-	p1 = ylookup[sy] + (p1<<2) + frameplace;
+	pe = ylookup[sy] + (p1<<2) + frameplace;
 	dirx = optistrx*(float)sx + optiheix*(float)sy + optiaddx;
 	diry = optistry*(float)sx + optiheiy*(float)sy + optiaddy;
 	i = zbufoff;
-	while (p0 != p1) {
+	while (p0 != pe) {
 		k = angstart[plc>>16][j].col;
 		l = angstart[plc>>16][j].dist;
 		l = (foglut[l>>20] & 32767);
@@ -1970,14 +1974,15 @@ void vrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
 	/* Portable scalar replacement for the SSE asm vertical raster.
 	 * Per-pixel uurend is the running angle index (uurend[sx] + delta);
 	 * angstart[..][iplc] supplies col + dist for the z-buffer write. */
-	int32_t i, p0;
+	intptr_t p0, pe;
+	int32_t i;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
-	p1 = ylookup[sy] + (p1<<2) + frameplace;
+	pe = ylookup[sy] + (p1<<2) + frameplace;
 	dirx = optistrx*(float)sx + optiheix*(float)sy + optiaddx;
 	diry = optistry*(float)sx + optiheiy*(float)sy + optiaddy;
 	i = zbufoff;
-	while (p0 < p1) {
+	while (p0 < pe) {
 		*(int32_t *)p0 = angstart[uurend[sx]>>16][iplc].col;
 		*(float *)(p0+i) = (float)angstart[uurend[sx]>>16][iplc].dist
 		                 / sqrtf(dirx*dirx + diry*diry);
@@ -1994,14 +1999,15 @@ void vrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iin
 {
 	/* Portable scalar replacement; see hrendzfogsse for the fog-blend
 	 * formulation, vrendzsse for the per-pixel uurend handling. */
-	int32_t i, k, l, p0;
+	intptr_t p0, pe;
+	int32_t i, k, l;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
-	p1 = ylookup[sy] + (p1<<2) + frameplace;
+	pe = ylookup[sy] + (p1<<2) + frameplace;
 	dirx = optistrx*(float)sx + optiheix*(float)sy + optiaddx;
 	diry = optistry*(float)sx + optiheiy*(float)sy + optiaddy;
 	i = zbufoff;
-	while (p0 < p1) {
+	while (p0 < pe) {
 		k = angstart[uurend[sx]>>16][iplc].col;
 		l = angstart[uurend[sx]>>16][iplc].dist;
 		l = (foglut[l>>20] & 32767);
