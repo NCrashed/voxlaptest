@@ -3,8 +3,8 @@ east  fd575e24449c9c53
 diag_down  41a470e50a57f65c
 high_down  13131fc5e975c483
 sprite_front  b7ab71e368e97def
-sprite_above  24dd7a8f42001332
-sprite_iso  0b0ac6413dae7dca
+sprite_above  59dd31d7cd571c6d
+sprite_iso  50ccddf6465f5ae0
 sprite_coco  4ca6110334c136b0
 diag_down_lit  45c9f570f80f660b
 tile_1x  f5ad9c39d61daf90
