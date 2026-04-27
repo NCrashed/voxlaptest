@@ -680,7 +680,7 @@ startremip0:
 
 	mov eax, ngxmax
 	cmp eax, _gxmax
-	jae short startsky
+	jae startsky          ;Stage 4.5b.7l: near jump — H6 hook below grew the distance past 127 bytes.
 	add eax, eax
 	jo skipngxmax1 ;Make sure it doesn't overflow to negative!
 	cmp eax, _gxmax
