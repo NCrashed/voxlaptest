@@ -357,6 +357,82 @@ void voxlap_trace_asm_remip (int32_t gmipcnt,
                 (unsigned)gdz0, (unsigned)gdz1, (unsigned)ngxmax);
     }
 }
+
+/* H8b: drawing-label entry trace hooks. Called from v5.asm just after
+ * each of the 4 drawing labels (drawfwall / drawcwall / drawceil /
+ * drawflor) but BEFORE any in-label state mutation. Field set is
+ * chosen to match scalar's existing Lfw/Lcw/Lce/Lfl events one-for-one
+ * so a line-diff between trace-asm and trace-scalar logs locates
+ * exactly which label is entered with mismatched state at the first
+ * divergence (focus: c=1276..1296, the split-region where H5 found
+ * 283 extra Ksteps in asm vs scalar). The hook protocol mirrors the
+ * H5 Kstep hook (save MM0..MM7, emms, swap ESP cfasm→espbak, PUSHAD,
+ * push args, call, ADD ESP, POPAD, restore ESP, restore MMX). */
+void voxlap_trace_asm_drawfwall (
+    void *v,
+    int32_t z0, int32_t z1,
+    int32_t cx0, int32_t cy0,
+    int32_t cx1, int32_t cy1,
+    int32_t ogx, int32_t gx,
+    int32_t mm5_tail,
+    int32_t wall_lane)
+{
+    if (vlt_fp) {
+        const unsigned char *vb = (const unsigned char *)v;
+        VLT_RAW("Lfw v=%p v[0]=%d v[1]=%d v[2]=%d v[3]=%d z0=%d z1=%d "
+                "cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x wlane=%d "
+                "gi0=%08x gi1=%08x",
+                v, vb[0], vb[1], vb[2], vb[3], z0, z1,
+                (unsigned)cx0, (unsigned)cy0, (unsigned)cx1, (unsigned)cy1,
+                (unsigned)ogx, (unsigned)gx, (unsigned)mm5_tail, wall_lane,
+                (unsigned)((int32_t *)&gi)[0], (unsigned)((int32_t *)&gi)[1]);
+    }
+}
+
+void voxlap_trace_asm_drawcwall (
+    void *v,
+    int32_t z0, int32_t z1,
+    int32_t cx0, int32_t cy0,
+    int32_t cx1, int32_t cy1,
+    int32_t ogx)
+{
+    if (vlt_fp) {
+        const unsigned char *vb = (const unsigned char *)v;
+        VLT_RAW("Lcw v=%p v[1]=%d v[3]=%d z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x",
+                v, vb[1], vb[3], z0, z1,
+                (unsigned)cx0, (unsigned)cy0, (unsigned)cx1, (unsigned)cy1, (unsigned)ogx);
+    }
+}
+
+void voxlap_trace_asm_drawceil (
+    int32_t z0, int32_t z1,
+    int32_t cx0, int32_t cy0,
+    int32_t cx1, int32_t cy1,
+    int32_t ogx, int32_t gx,
+    int32_t mm5_tail)
+{
+    if (vlt_fp) {
+        VLT_RAW("Lce z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x",
+                z0, z1,
+                (unsigned)cx0, (unsigned)cy0, (unsigned)cx1, (unsigned)cy1,
+                (unsigned)ogx, (unsigned)gx, (unsigned)mm5_tail);
+    }
+}
+
+void voxlap_trace_asm_drawflor (
+    int32_t z0, int32_t z1,
+    int32_t cx0, int32_t cy0,
+    int32_t cx1, int32_t cy1,
+    int32_t ogx, int32_t gx,
+    int32_t mm5_tail)
+{
+    if (vlt_fp) {
+        VLT_RAW("Lfl z0=%d z1=%d cx0=%08x cy0=%08x cx1=%08x cy1=%08x ogx=%08x gx=%08x mm5=%08x",
+                z0, z1,
+                (unsigned)cx0, (unsigned)cy0, (unsigned)cx1, (unsigned)cy1,
+                (unsigned)ogx, (unsigned)gx, (unsigned)mm5_tail);
+    }
+}
 #endif
 
 #define gi0 (((int32_t *)&gi)[0])
