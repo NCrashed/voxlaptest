@@ -27,6 +27,7 @@ IFDEF VOXLAP_GROUSCAN_TRACE
 ;Defined in voxlap5.c under #ifdef VOXLAP_GROUSCAN_TRACE.
 EXTRN _voxlap_asm_oldebp : dword
 EXTRN _voxlap_asm_savemm : qword
+EXTRN _voxlap_asm_save_cfasmesp : dword
 EXTRN _voxlap_trace_asm_kstep : NEAR
 ENDIF
 
@@ -415,13 +416,18 @@ ENDIF
 	mov esp, ce
 
 IFDEF VOXLAP_GROUSCAN_TRACE
-	;Stage 4.5b.7h (H5): trace hook. Save MMX + all GPRs around the C
-	;call. cdecl marks EAX/ECX/EDX as caller-saved, so the C function
-	;is free to clobber them — but the asm uses ECX as z0 and EDX as
-	;z1 across iterations, and skipixy2's sync writes ECX/EDX into the
-	;c_presync slot. Without PUSHAD/POPAD, garbage ECX/EDX corrupts
-	;the cfasm slot and intoslabloop's `[eax+ecx*4]` index reads from
-	;a wild address (STATUS_ACCESS_VIOLATION 0xC0000005 on first run).
+	;Stage 4.5b.7h (H5): trace hook. The grouscanasm prologue (line
+	;~187) saves real ESP to espbak then sets ESP to point into the
+	;_cfasm linked-list buffer (it acts as the `c` C-pointer for the
+	;rest of the function). Calling C from this state would push the
+	;C frame onto _cfasm[0..2047] (the "stack space" region) and
+	;fprintf's deep call chain quickly overflows into adjacent
+	;memory — first run got STATUS_ACCESS_VIOLATION (0xC0000005).
+	;Switch ESP to the real OS stack (espbak) before pushing args,
+	;switch back after POPAD. PUSHAD/POPAD around the call also
+	;preserves EAX/ECX/EDX (cdecl caller-saved); the asm uses ECX as
+	;z0 and EDX as z1 across iterations, so we can't let C clobber
+	;them.
 	movq qword ptr [_voxlap_asm_savemm + 0],  mm0
 	movq qword ptr [_voxlap_asm_savemm + 8],  mm1
 	movq qword ptr [_voxlap_asm_savemm + 16], mm2
@@ -431,6 +437,11 @@ IFDEF VOXLAP_GROUSCAN_TRACE
 	movq qword ptr [_voxlap_asm_savemm + 48], mm6
 	movq qword ptr [_voxlap_asm_savemm + 56], mm7
 	emms
+
+	;Switch ESP from the cfasm-pointer to the real OS stack saved
+	;at function entry. After the call, restore the cfasm-ESP.
+	mov dword ptr [_voxlap_asm_save_cfasmesp], esp
+	mov esp, dword ptr espbak
 
 	pushad                                            ;save all GPRs
 
@@ -445,6 +456,9 @@ IFDEF VOXLAP_GROUSCAN_TRACE
 	add esp, 28                                       ;7 args * 4 bytes
 
 	popad                                             ;restore all GPRs
+
+	;Restore the cfasm-style ESP for the asm's continued use.
+	mov esp, dword ptr [_voxlap_asm_save_cfasmesp]
 
 	movq mm0, qword ptr [_voxlap_asm_savemm + 0]
 	movq mm1, qword ptr [_voxlap_asm_savemm + 8]

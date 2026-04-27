@@ -324,6 +324,13 @@ VOXLAP_API void voxlap_trace_close (void) {
  * are referenced from v5.asm via EXTRN; do NOT make them static. */
 int32_t  voxlap_asm_oldebp;
 int64_t  voxlap_asm_savemm[8];
+/* v5.asm uses ESP as a pointer into the cfasm linked-list buffer
+ * during grouscanasm — not as the real OS stack — so calling C
+ * with that ESP would push into _cfasm and overflow fprintf's
+ * deep frame into adjacent memory. The hook saves cfasm-ESP here,
+ * switches ESP to espbak (real OS stack saved at function entry),
+ * calls the C function, then restores. */
+int32_t  voxlap_asm_save_cfasmesp;
 
 void voxlap_trace_asm_kstep (int32_t wlane, int32_t lane,
                               int32_t ogx, int32_t gx,
