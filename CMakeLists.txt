@@ -110,6 +110,13 @@ if(VOXLAP_GROUSCAN_TRACE)
     target_compile_definitions(voxlap PRIVATE VOXLAP_GROUSCAN_TRACE)
     # `oracle` target is defined further down; oracle's flag is applied
     # there once the target exists.
+    if(MSVC)
+        # Stage 4.5b.7h: also pass VOXLAP_GROUSCAN_TRACE to MASM so the
+        # asm-side trace hook in v5.asm (IFDEF blocks) compiles in for
+        # the windows-msvc-x86-trace-asm CI job. ml.exe accepts /D via
+        # CMake's COMPILE_DEFINITIONS for ASM_MASM targets.
+        target_compile_definitions(voxasm PRIVATE VOXLAP_GROUSCAN_TRACE)
+    endif()
 endif()
 
 # Generate voxlap_export.h with a portable VOXLAP_API macro. Resolves to

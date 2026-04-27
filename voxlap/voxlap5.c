@@ -315,6 +315,28 @@ VOXLAP_API void voxlap_trace_close (void) {
 #endif
 }
 
+#ifdef VOXLAP_GROUSCAN_TRACE
+/* --- Stage 4.5b.7h (H5): asm-side trace hook ---
+ * v5.asm calls voxlap_trace_asm_kstep from its column-step path
+ * (afterdelete column-step section, after gpz[NEW]+=gdz advance).
+ * The asm hook saves/restores all MMX state across the call so we
+ * don't disturb its in-flight register file. Both globals below
+ * are referenced from v5.asm via EXTRN; do NOT make them static. */
+int32_t  voxlap_asm_oldebp;
+int64_t  voxlap_asm_savemm[8];
+
+void voxlap_trace_asm_kstep (int32_t wlane, int32_t lane,
+                              int32_t ogx, int32_t gx,
+                              int32_t gpz0, int32_t gpz1,
+                              void *v) {
+    if (vlt_fp) {
+        VLT_RAW("Kstep wlane=%d lane=%d ogx=%08x gx=%08x gpz0=%08x gpz1=%08x v=%p",
+                wlane, lane, (unsigned)ogx, (unsigned)gx,
+                (unsigned)gpz0, (unsigned)gpz1, v);
+    }
+}
+#endif
+
 #define gi0 (((int32_t *)&gi)[0])
 #define gi1 (((int32_t *)&gi)[1])
 

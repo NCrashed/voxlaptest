@@ -22,6 +22,14 @@ EXTRN _skyoff : dword   ;Memory offset to start of longitude line
 EXTRN _skyxsiz : dword  ;Size of longitude line
 EXTRN _skylat : dword   ;long[_skyxsiz] : latitude's unit dir. vector
 
+IFDEF VOXLAP_GROUSCAN_TRACE
+;Stage 4.5b.7h (H5): asm-side trace hook globals + entry point.
+;Defined in voxlap5.c under #ifdef VOXLAP_GROUSCAN_TRACE.
+EXTRN _voxlap_asm_oldebp : dword
+EXTRN _voxlap_asm_savemm : qword
+EXTRN _voxlap_trace_asm_kstep : NEAR
+ENDIF
+
 ;How to declare C-ASM shared variables in the ASM code:
 ;ASM:                    C:
 ;   PUBLIC _xr0             extern void *xr0;
@@ -385,6 +393,11 @@ afterdelete:
 	cmp esp, offset _cfasm[2048]
 	jae skipixy
 
+IFDEF VOXLAP_GROUSCAN_TRACE
+	;Capture OLD ebp (= wall_lane) BEFORE the column step recomputes it.
+	mov dword ptr _voxlap_asm_oldebp, ebp
+ENDIF
+
 	movq mm4, qword ptr _gcsub[ebp*8]
 	add esi, _gixy[ebp*4]
 	mov ebp, _gpz[4]
@@ -400,6 +413,42 @@ afterdelete:
 	add eax, _gdz[ebp*4]
 	mov _gpz[ebp*4], eax
 	mov esp, ce
+
+IFDEF VOXLAP_GROUSCAN_TRACE
+	;Stage 4.5b.7h (H5): trace hook. Save MMX, emms, push args (cdecl,
+	;right-to-left), call C, restore MMX. mm6.dword[0] = ogx, dword[1] = gx
+	;at this point (post punpckldq + pand). We log the post-Kstep state so
+	;it's directly comparable to the scalar port's Kstep VLT_RAW event.
+	movq qword ptr _voxlap_asm_savemm[0],  mm0
+	movq qword ptr _voxlap_asm_savemm[8],  mm1
+	movq qword ptr _voxlap_asm_savemm[16], mm2
+	movq qword ptr _voxlap_asm_savemm[24], mm3
+	movq qword ptr _voxlap_asm_savemm[32], mm4
+	movq qword ptr _voxlap_asm_savemm[40], mm5
+	movq qword ptr _voxlap_asm_savemm[48], mm6
+	movq qword ptr _voxlap_asm_savemm[56], mm7
+	emms
+
+	push edi                                          ;arg 7: v
+	push dword ptr _gpz[4]                            ;arg 6: gpz1
+	push dword ptr _gpz[0]                            ;arg 5: gpz0
+	push dword ptr _voxlap_asm_savemm[52]             ;arg 4: gx (mm6.dword[1])
+	push dword ptr _voxlap_asm_savemm[48]             ;arg 3: ogx (mm6.dword[0])
+	push ebp                                          ;arg 2: lane (NEW)
+	push dword ptr _voxlap_asm_oldebp                 ;arg 1: wlane (OLD)
+	call _voxlap_trace_asm_kstep
+	add esp, 28                                       ;7 args * 4 bytes
+
+	movq mm0, qword ptr _voxlap_asm_savemm[0]
+	movq mm1, qword ptr _voxlap_asm_savemm[8]
+	movq mm2, qword ptr _voxlap_asm_savemm[16]
+	movq mm3, qword ptr _voxlap_asm_savemm[24]
+	movq mm4, qword ptr _voxlap_asm_savemm[32]
+	movq mm5, qword ptr _voxlap_asm_savemm[40]
+	movq mm6, qword ptr _voxlap_asm_savemm[48]
+	movq mm7, qword ptr _voxlap_asm_savemm[56]
+ENDIF
+
 	jmp skipixy2
 
 skipixy:
