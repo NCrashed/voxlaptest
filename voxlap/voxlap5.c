@@ -132,7 +132,9 @@ castdat skycast;
 #define cf ((cftype *)&cfasm[0])
 
 	//Screen related variables:
-static int32_t xres, yres, bytesperline, frameplace, xres4;
+static int32_t xres, yres, bytesperline, xres4;
+/* frameplace stores a host framebuffer address; must be pointer-width. */
+static intptr_t frameplace;
 int32_t ylookup[MAXYDIM+1];
 
 static lpoint3d glipos;
@@ -7888,7 +7890,9 @@ int32_t caddasm[8*4];
 int32_t ztabasm[(MAXZSIZ+3)*4];
 #define ztab4 ((point4d *)&ztabasm[0])
 short qsum0[4], qsum1[4], qbplbpp[4];
-int32_t kv6frameplace, kv6bytesperline;
+/* kv6frameplace stores a host framebuffer address; kv6bytesperline is a scalar. */
+intptr_t kv6frameplace;
+int32_t kv6bytesperline;
 /* _scisdist was 4 dwords (16 bytes) in the asm; the upper 12 are zero
  * pad. C code only ever reads it as a single float (`_mm_load_ss` —
  * 4 bytes), so the pad is dropped. */
