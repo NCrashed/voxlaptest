@@ -13166,28 +13166,10 @@ intoslabloop:
 			 *
 			 * Asm's prebegsearchi16 does 16-step batches for speed; the
 			 * single-step search here is simpler and covers the same
-			 * sign-transition.
-			 *
-			 * Stage 4.5b.7n (H7): sync ONLY z0. The shift below copies
-			 * c.memory into c+1 verbatim, so the locals' z0 needs to
-			 * land in c.memory beforehand for the post-c++ `z0 = c->z0`
-			 * reload to pull LATEST z0 into the locals (matching asm,
-			 * which carries LATEST z0 in ECX across the split — asm
-			 * doesn't reload).
-			 *
-			 * The other five fields (z1, cx0/cy0, cx1/cy1) MUST stay
-			 * at gline-init INITIAL values in c.memory. After the split
-			 * c[0]'s explicit overrides write cx0/cy0/z0/i0; the unset
-			 * fields remain INITIAL. When c[1] is later popped and the
-			 * skipixy_with_presync sync reloads c[0] into the locals,
-			 * cx1/cy1/z1 must come back as INITIAL — that's the right-
-			 * edge ray for the lower-half pixel range, which is the
-			 * gline's original right edge, NOT the post-search-end
-			 * value. The asm path achieves this by never syncing them
-			 * before split; H1 (4.5b.7d) tried the same but also
-			 * dropped the z0 reload below, which broke z0 propagation
-			 * into c[1] and worsened sprite_above. */
-			c->z0 = z0;
+			 * sign-transition. */
+			c->z0 = z0; c->z1 = z1;
+			c->cx0 = cx0; c->cy0 = cy0;
+			c->cx1 = cx1; c->cy1 = cy1;
 
 			/* mm3 for the search = gylookoff[v[2]+1] (same gy_raw as
 			 * first test). Reset gy_raw in case it was overwritten by
