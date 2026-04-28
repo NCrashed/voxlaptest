@@ -41,6 +41,12 @@ jobs:
 
       - name: Diff hashes against golden
         shell: bash
+        # Windows MSVC x86 is the original/reference platform — its
+        # hashes are frozen in tests/oracle/golden-hashes.txt. Linux
+        # GCC/Clang use a separate per-platform table because the
+        # scalar rasterizer rewrite in 4.7.5/4.7.6 replaced rsqrtss
+        # with 1.0/sqrtf, which is more accurate but not bit-equal
+        # to the SSE recip-sqrt MSVC produces.
         run: |
           if [ -f tests/oracle/golden-hashes.txt ]; then
             echo "Comparing against frozen golden-hashes.txt:"
@@ -60,7 +66,7 @@ jobs:
             build/oracle-run/*.png
 
   linux-gcc:
-    name: Linux GCC (CMake configure + build)
+    name: Linux GCC (CMake + oracle)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,9 +78,30 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc
       - name: Build
         run: cmake --build build
+      - name: Run oracle (writes hashes.txt + PNGs to oracle-run)
+        # oracle finds libvoxlap.so via LD_LIBRARY_PATH at runtime.
+        working-directory: build/oracle-run
+        run: LD_LIBRARY_PATH=../bin ../bin/oracle
+      - name: Diff hashes against Linux golden
+        run: |
+          if [ -f tests/oracle/golden-hashes-linux.txt ]; then
+            echo "Comparing against frozen golden-hashes-linux.txt:"
+            diff -u tests/oracle/golden-hashes-linux.txt build/oracle-run/hashes.txt
+          else
+            echo "No tests/oracle/golden-hashes-linux.txt yet — this run establishes the baseline."
+            cat build/oracle-run/hashes.txt
+          fi
+      - name: Upload oracle artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-linux-gcc
+          path: |
+            build/oracle-run/hashes.txt
+            build/oracle-run/*.png
 
   linux-clang:
-    name: Linux Clang (CMake configure + build)
+    name: Linux Clang (CMake + oracle)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,6 +113,27 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang
       - name: Build
         run: cmake --build build
+      - name: Run oracle
+        working-directory: build/oracle-run
+        run: LD_LIBRARY_PATH=../bin ../bin/oracle
+      - name: Diff hashes against Linux golden
+        # Linux GCC and Clang produce identical hashes locally, so they
+        # share one golden table. If a future toolchain divergence
+        # appears, split into golden-hashes-linux-{gcc,clang}.txt.
+        run: |
+          if [ -f tests/oracle/golden-hashes-linux.txt ]; then
+            diff -u tests/oracle/golden-hashes-linux.txt build/oracle-run/hashes.txt
+          else
+            cat build/oracle-run/hashes.txt
+          fi
+      - name: Upload oracle artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-linux-clang
+          path: |
+            build/oracle-run/hashes.txt
+            build/oracle-run/*.png
 
   # macOS coverage is intentionally absent. Two paths are blocked:
   #   - macos-13 (Intel): the runner has been deprecated by GitHub
