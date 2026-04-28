@@ -1,0 +1,5 @@
+# The oracle writes hashes.txt with bare LF. Force LF for the golden
+# table so a Windows checkout with autocrlf=true doesn't smuggle in
+# CR bytes — that would make every CI diff look like a full-file
+# rewrite even when the hashes themselves match.
+tests/oracle/golden-hashes.txt text eol=lf
