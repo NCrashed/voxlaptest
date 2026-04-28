@@ -90,6 +90,19 @@ static int32_t *vbuf = 0, *vbit = 0, vbiti;
 
 	//Memory management variables:
 #define MAXCSIZ 1028
+
+/* sptr[] elements are char* (pointer-width: 4 on LP32, 8 on LP64).
+ * gpixy/ixy/gixy/gixyi step in BYTES across sptr, so the stride
+ * values, the bit math that tests row/column parity, and the deref
+ * width must all scale with sizeof(char *). */
+#if (UINTPTR_MAX > 0xFFFFFFFFu)
+  #define SPTR_LOG2_STRIDE 3   /* sizeof(char *) == 8 */
+#else
+  #define SPTR_LOG2_STRIDE 2   /* sizeof(char *) == 4 */
+#endif
+#define SPTR_STRIDE     ((int32_t)1 << SPTR_LOG2_STRIDE)
+#define SPTR_ROW_STRIDE ((int32_t)(VSID << SPTR_LOG2_STRIDE))
+
 char tbuf[MAXCSIZ];
 /* tbuf2 stores (z-offset, vbuf-slab pointer) pairs (and triples in compilerle).
  * The pointer entries need pointer-width carriers on LP64. */
@@ -224,7 +237,11 @@ int64_t gi, gcsub[9] =
 	0xff00ff00ff00ff,0xff00ff00ff00ff,0xff00ff00ff00ff,0xff00ff00ff00ff
 };
 int32_t gylookup[2048+45], gmipnum = 0; //256+4+128+4+64+4+...
-int32_t gpz[2], gdz[2], gxmip, gxmax, gixy[2], gpixy;
+int32_t gpz[2], gdz[2], gxmip, gxmax, gixy[2];
+/* gpixy = &sptr[y*VSID+x] cast to integer; pointer-width on LP64.
+ * gixy[lane] are byte-strides through sptr (±SPTR_STRIDE for column,
+ * ±SPTR_ROW_STRIDE for row). */
+intptr_t gpixy;
 static int32_t gmaxscandist;
 
 //int32_t reax, rebx, recx, redx, resi, redi, rebp, resp, remm[16];
@@ -1148,8 +1165,8 @@ void gline (int32_t leng, float x0, float y0, float x1, float y1)
 	ftol(fabs(f1)*PREC,&gdz[0]);
 	ftol(fabs(f2)*PREC,&gdz[1]);
 
-	gixy[0] = (((*(int32_t *)&vx1)>>31)<<3)+4; //=sgn(vx1)*4
-	gixy[1] = gixyi[(*(uint32_t *)&vy1)>>31]; //=sgn(vy1)*4*VSID
+	gixy[0] = (((*(int32_t *)&vx1)>>31) & (-2*SPTR_STRIDE)) + SPTR_STRIDE; //=sgn(vx1)*sizeof(char*)
+	gixy[1] = gixyi[(*(uint32_t *)&vy1)>>31]; //=sgn(vy1)*VSID*sizeof(char*)
 	if (gdz[0] <= 0) { gpz[0] = 0x7fffffff; gdz[0] = 0; } //Hack for divide overflow
 	else ftol(gposxfrac[(*(uint32_t *)&vx1)>>31]*(float)gdz[0],&gpz[0]);
 	if (gdz[1] <= 0) { gpz[1] = 0x7fffffff; gdz[1] = 0; } //Hack for divide overflow
@@ -1308,7 +1325,7 @@ void setflash (float px, float py, float pz, int32_t flashradius, int32_t numang
 	ftol(pz*FPREC-.5f,&gposz);
 	for(gylookup[0]=-gposz,i=1;i<516;i++) gylookup[i] = gylookup[i-1]+FPREC;
 
-	vs = (char *)*(int32_t *)gpixy;
+	vs = *(char **)gpixy;
 	if (ipz >= vs[1])
 	{
 		do
@@ -1330,8 +1347,8 @@ void setflash (float px, float py, float pz, int32_t flashradius, int32_t numang
 		ftol(FPREC/fabs(vx),&gdz[0]);
 		ftol(FPREC/fabs(vy),&gdz[1]);
 
-		gixy[0] = (((*(int32_t *)&vx)>>31) & (     -8)) +      4;
-		gixy[1] = (((*(int32_t *)&vy)>>31) & (VSID*-8)) + VSID*4;
+		gixy[0] = (((*(int32_t *)&vx)>>31) & (-2*SPTR_STRIDE    )) + SPTR_STRIDE;
+		gixy[1] = (((*(int32_t *)&vy)>>31) & (-2*SPTR_ROW_STRIDE)) + SPTR_ROW_STRIDE;
 		if (gdz[0] < 0) { gpz[0] = 0x7fffffff; gdz[0] = 0; } //Hack for divide overflow
 		else ftol(gposxfrac[(*(uint32_t *)&vx)>>31]*(float)gdz[0],&gpz[0]);
 		if (gdz[1] < 0) { gpz[1] = 0x7fffffff; gdz[1] = 0; } //Hack for divide overflow
@@ -1359,7 +1376,7 @@ void setflash (float px, float py, float pz, int32_t flashradius, int32_t numang
 		j = (((uint32_t)(gpz[1]-gpz[0]))>>31);
 		gx = gpz[j];
 		ixy = gpixy;
-		if (v == (char *)*(int32_t *)gpixy) goto fdrawflor; goto fdrawceil;
+		if (v == *(char **)gpixy) goto fdrawflor; goto fdrawceil;
 
 		while (1)
 		{
@@ -1379,7 +1396,7 @@ fdrawfwall:;
 				} while (v[1] != c->z1); }
 			}
 
-			if (v == (char *)*(int32_t *)ixy) goto fdrawflor;
+			if (v == *(char **)ixy) goto fdrawflor;
 
 //fdrawcwall:;
 			if (v[3] != c->z0)
@@ -1420,7 +1437,7 @@ fafterdelete:;
 				ogx = gx; gx = gpz[j];
 
 				if (gx > gxmax) break;
-				v = (char *)*(int32_t *)ixy; c = ce;
+				v = *(char **)ixy; c = ce;
 			}
 				//Find highest intersecting vbuf slab
 			while (1)
@@ -2086,7 +2103,7 @@ void opticast ()
 
 	if (gifor.z < 0) giforzsgn = -1; else giforzsgn = 1; //giforzsgn = (gifor.z < 0);
 
-	gixyi[0] = (VSID<<2); gixyi[1] = -gixyi[0];
+	gixyi[0] = SPTR_ROW_STRIDE; gixyi[1] = -gixyi[0];
 	glipos.x = ((int32_t)gipos.x);
 	glipos.y = ((int32_t)gipos.y);
 	glipos.z = ((int32_t)gipos.z);
@@ -2109,7 +2126,7 @@ void opticast ()
 	if (ofogdist < 0) nskypic = skypic;
 				  else { nskypic = skyoff = 0; } //Optimization hack: draw sky as pure black when using fog
 
-	gstartv = (unsigned char *)*(int32_t *)gpixy;
+	gstartv = (unsigned char *)*(char **)gpixy;
 	if (glipos.z >= gstartv[1])
 	{
 		do
@@ -11810,7 +11827,15 @@ remiporend:
 		/* --- gdz[0] adjust + saturating double ---
 		 * Asm uses the sign of `(esi_rel<<29) ^ gixy[0]` to decide
 		 * whether to add gdz[0] to gpz[0] (aligning to the coarser
-		 * grid's half-step), then doubles gdz[0] with overflow clamp. */
+		 * grid's half-step), then doubles gdz[0] with overflow clamp.
+		 *
+		 * NOTE: the `<<29` and the `+17` shift below assume sptr stride
+		 * == 4 bytes (LP32). On LP64 the entries are 8 bytes wide and
+		 * these shifts test the wrong bit of esi_rel. Mip transitions
+		 * are gated on `gmipnum > 1` (line 11411) which only fires when
+		 * vxlmipuse > 1 — the oracle scenes use vxlmipuse == 1, so this
+		 * path isn't exercised. Audit + scale by SPTR_LOG2_STRIDE
+		 * before enabling vxlmipuse > 1 on LP64. */
 		{
 			int32_t xor0 = (int32_t)((uint32_t)(int32_t)esi_rel << 29)
 			              ^ gixy[0];
