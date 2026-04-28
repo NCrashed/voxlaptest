@@ -91,7 +91,9 @@ static int32_t *vbuf = 0, *vbit = 0, vbiti;
 	//Memory management variables:
 #define MAXCSIZ 1028
 char tbuf[MAXCSIZ];
-int32_t tbuf2[MAXZDIM*3];
+/* tbuf2 stores (z-offset, vbuf-slab pointer) pairs (and triples in compilerle).
+ * The pointer entries need pointer-width carriers on LP64. */
+intptr_t tbuf2[MAXZDIM*3];
 int32_t templongbuf[MAXZDIM];
 
 int32_t cputype = 0; //bit25=1: SSE (runtime dispatch removed, kept for diagnostics)
@@ -168,10 +170,14 @@ static int32_t xbsceil[32], xbsflor[32];
 #define VLSTSIZ 65536 //Theoretically should be at least: VOXSIZ\8
 #define LOGHASHEAD 12
 #define FSTKSIZ 8192
-typedef struct { int32_t v, b; } vlstyp;
+/* .v stores a vbuf column pointer (intptr_t on LP64); .b is a hash-list link index. */
+typedef struct { intptr_t v; int32_t b; } vlstyp;
 vlstyp vlst[VLSTSIZ];
 int32_t hhead[1<<LOGHASHEAD], vlstcnt = 0x7fffffff;
-lpoint3d fstk[FSTKSIZ]; //Note .z is actually used as a pointer, not z!
+/* fstk's .z is used as a pointer (vbuf column address), not a z-coordinate.
+ * lpoint3d's int32_t z would truncate on LP64; use a custom type with intptr_t z. */
+typedef struct { int32_t x, y; intptr_t z; } fstktype;
+fstktype fstk[FSTKSIZ];
 #define FLCHKSIZ 4096
 lpoint3d flchk[FLCHKSIZ]; int32_t flchkcnt = 0;
 
@@ -1279,7 +1285,8 @@ void setflash (float px, float py, float pz, int32_t flashradius, int32_t numang
 {
 	uint64_t q;
 	float vx, vy;
-	int32_t i, j, gx, ogx, ixy, col, angoff;
+	int32_t i, j, gx, ogx, angoff;
+	intptr_t ixy, col;     /* sptr-array address + slab-color pointer */
 	int32_t ipx, ipy, ipz, sz0, sz1;
 	cftype *c, *c2, *ce;
 	char *v, *vs;
@@ -3944,7 +3951,8 @@ void expandrle (int32_t x, int32_t y, int32_t *uind)
 	//Returns: n: length of compressed buffer (in bytes)
 int32_t compilerle (int32_t *n0, int32_t *n1, int32_t *n2, int32_t *n3, int32_t *n4, char *cbuf, int32_t px, int32_t py)
 {
-	int32_t i, ia, ze, zend, onext, dacnt, n, *ic;
+	int32_t i, ia, ze, zend, onext, dacnt, n;
+	intptr_t *ic;     /* points into tbuf2 (now intptr_t array) */
 	lpoint3d p;
 	char *v;
 
@@ -4458,7 +4466,8 @@ void voxbackup (int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t tag)
 	//   -2: use vx5.colfunc
 void setcube (int32_t px, int32_t py, int32_t pz, int32_t col)
 {
-	int32_t bakcol, (*bakcolfunc)(lpoint3d *), *lptr;
+	int32_t (*bakcolfunc)(lpoint3d *), *lptr;
+	intptr_t bakcol;     /* getcube: 0=air, 1=unexposed, else vbuf col ptr */
 
 	vx5.minx = px; vx5.maxx = px+1;
 	vx5.miny = py; vx5.maxy = py+1;
@@ -5467,7 +5476,8 @@ void tmaphulltrisortho (point3d *pt)
 {
 	point3d *i0, *i1;
 	float r, knmx, knmy, knmc, xinc;
-	int32_t i, k, op, p, pe, y, yi, z, zi, sy, sy1, itop, ibot, damost;
+	int32_t i, k, y, yi, z, zi, sy, sy1, itop, ibot;
+	intptr_t op, p, pe, damost;     /* umost/dmost-derived addresses */
 
 	for(k=0;k<tricnt;k++)
 	{
@@ -9081,7 +9091,8 @@ static kv6voxtype *getvptr (kv6data *kv, int32_t x, int32_t y)
 }
 
 #define VFIFSIZ 16384 //SHOULDN'T BE STATIC ALLOCATION!!!
-static int32_t vfifo[VFIFSIZ];
+/* Half the entries store ints (x,y), half store kv6voxtype* — pointer-width on LP64. */
+static intptr_t vfifo[VFIFSIZ];
 static void floodsucksprite (vx5sprite *spr, kv6data *kv, int32_t ox, int32_t oy,
 									  kv6voxtype *v0, kv6voxtype *v1)
 {
@@ -9095,7 +9106,7 @@ static void floodsucksprite (vx5sprite *spr, kv6data *kv, int32_t ox, int32_t oy
 	v1->vis &= ~64;
 
 	vfifo[0] = ox; vfifo[1] = oy;
-	vfifo[2] = (intptr_t)v0; vfifo[3] = (int32_t)v1;
+	vfifo[2] = (intptr_t)v0; vfifo[3] = (intptr_t)v1;
 	vfif0 = 0; vfif1 = 4;
 
 	while (vfif0 < vfif1)
@@ -9166,8 +9177,8 @@ floodsuckend:;
 	kv6->namoff = 0;
 	kv6->lowermip = 0;
 	kv6->vox = (kv6voxtype *)(((intptr_t)kv6)+sizeof(kv6data));
-	kv6->xlen = (uint32_t *)(((int32_t)kv6->vox)+n*sizeof(kv6voxtype));
-	kv6->ylen = (unsigned short *)(((int32_t)kv6->xlen)+(x1-x0)*4);
+	kv6->xlen = (uint32_t *)(((intptr_t)kv6->vox)+n*sizeof(kv6voxtype));
+	kv6->ylen = (unsigned short *)(((intptr_t)kv6->xlen)+(x1-x0)*4);
 
 		//Extract sub-KV6 to newly allocated kv6data
 	v3 = kv6->vox; n = 0;
@@ -10008,8 +10019,9 @@ freezesprcont:;
 	//kv6, vox, xlen, ylen are all malloced in here!
 int32_t meltsphere (vx5sprite *spr, lpoint3d *hit, int32_t hitrad)
 {
-	int32_t i, j, x, y, z, xs, ys, zs, xe, ye, ze, sq, z0, z1;
+	int32_t j, x, y, z, xs, ys, zs, xe, ye, ze, sq, z0, z1;
 	int32_t oxvoxs, oyvoxs, numvoxs, cx, cy, cz, cw;
+	intptr_t i;     /* malloc'd kv6data pointer / getcube return (vbuf col ptr) */
 	float f, ff;
 	kv6data *kv;
 	kv6voxtype *voxptr;
@@ -10135,8 +10147,9 @@ int32_t meltsphere (vx5sprite *spr, lpoint3d *hit, int32_t hitrad)
 int32_t meltspans (vx5sprite *spr, vspans *lst, int32_t lstnum, lpoint3d *offs)
 {
 	float f;
-	int32_t i, j, x, y, z, xs, ys, zs, xe, ye, ze, z0, z1;
+	int32_t j, x, y, z, xs, ys, zs, xe, ye, ze, z0, z1;
 	int32_t ox, oy, oxvoxs, oyvoxs, numvoxs, cx, cy, cz, cw;
+	intptr_t i;     /* malloc'd kv6data pointer / getcube return (vbuf col ptr) */
 	kv6data *kv;
 	kv6voxtype *voxptr;
 	uint32_t *xlenptr;
@@ -10681,8 +10694,9 @@ void dofall (int32_t i)
 	//kv6, vox, xlen, ylen are all malloced in here!
 int32_t meltfall (vx5sprite *spr, int32_t fi, int32_t delvxl)
 {
-	int32_t i, j, k, x, y, z, xs, ys, zs, xe, ye, ze;
+	int32_t j, k, x, y, z, xs, ys, zs, xe, ye, ze;
 	int32_t oxvoxs, oyvoxs, numvoxs;
+	intptr_t i;     /* malloc'd kv6data pointer / vbuf col ptr from vlst[i].v */
 	char *v, *ov, *nv;
 	kv6data *kv;
 	kv6voxtype *voxptr;
@@ -11040,7 +11054,8 @@ void pngoutputpixel (int32_t rgbcol)
 
 int32_t screencapture32bit (const char *fname)
 {
-	int32_t p, x, y;
+	int32_t x, y;
+	intptr_t p;     /* framebuffer cursor */
 
 	pngoutopenfile(fname,xres,yres);
 	p = frameplace;
