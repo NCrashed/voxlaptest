@@ -49,7 +49,7 @@ jobs:
         run: |
           if [ -f tests/oracle/golden-hashes.txt ]; then
             echo "Comparing against frozen golden-hashes.txt:"
-            diff -u tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt
+            diff -u --strip-trailing-cr tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt
           else
             echo "No tests/oracle/golden-hashes.txt yet — this run establishes the baseline."
             cat build/oracle-run/hashes.txt
@@ -88,7 +88,7 @@ jobs:
         run: |
           if [ -f tests/oracle/golden-hashes.txt ]; then
             echo "Comparing against frozen golden-hashes.txt:"
-            diff -u tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt
+            diff -u --strip-trailing-cr tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt
           else
             echo "No tests/oracle/golden-hashes.txt yet — this run establishes the baseline."
             cat build/oracle-run/hashes.txt
@@ -121,7 +121,7 @@ jobs:
       - name: Diff hashes against golden
         run: |
           if [ -f tests/oracle/golden-hashes.txt ]; then
-            diff -u tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt
+            diff -u --strip-trailing-cr tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt
           else
             cat build/oracle-run/hashes.txt
           fi
