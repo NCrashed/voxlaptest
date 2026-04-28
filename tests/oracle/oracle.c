@@ -331,6 +331,29 @@ int main(void) {
 
 	build_scene();
 	build_test_tile();
+
+	/* Optional one-shot dump of the procedurally-built world to a
+	 * .vxl file, used by the roxlap port's R2.3 parser tests as a
+	 * shared fixture (same world both engines render). Gated on env
+	 * var so the default CI run is unaffected. Camera vectors are
+	 * placeholders — savevxl just records them in the header for
+	 * loadvxl to expose as the file's "starting pose"; world data
+	 * lives in sptr[] which is what the roxlap parser validates. */
+	{
+		const char *vxl_save_path = getenv("ROXLAP_SAVE_VXL");
+		if (vxl_save_path) {
+			dpoint3d save_ipo = { 1024.0, 1024.0, 128.0 };
+			dpoint3d save_ist = {    1.0,    0.0,   0.0 };
+			dpoint3d save_ihe = {    0.0,    0.0,   1.0 };
+			dpoint3d save_ifo = {    0.0,    1.0,   0.0 };
+			if (savevxl(vxl_save_path, &save_ipo, &save_ist, &save_ihe, &save_ifo)) {
+				fprintf(stderr, "saved oracle world to %s\n", vxl_save_path);
+			} else {
+				fprintf(stderr, "savevxl(%s) failed\n", vxl_save_path);
+			}
+		}
+	}
+
 	voxsetframebuffer((intptr_t)g_fb, BYTESPERLINE, XRES, YRES);
 
 	hf = fopen("hashes.txt", "w");
