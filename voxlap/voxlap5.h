@@ -298,7 +298,7 @@ VOXLAP_API extern int32_t kprender (const char *, int32_t, int32_t, int32_t, int
 	//ZIP functions:
 VOXLAP_API extern int32_t kzaddstack (const char *);
 VOXLAP_API extern void kzuninit ();
-VOXLAP_API extern int32_t kzopen (const char *);
+VOXLAP_API extern intptr_t kzopen (const char *); //returns FILE* cast to intptr_t (or 0)
 VOXLAP_API extern int32_t kzread (void *, int32_t);
 VOXLAP_API extern int32_t kzfilelength ();
 VOXLAP_API extern int32_t kzseek (int32_t, int32_t);

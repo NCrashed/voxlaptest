@@ -2822,7 +2822,7 @@ void kzsetfil (FILE *fil)
 	kzfs.i = 0;
 }
 
-int32_t kzopen (const char *filnam)
+intptr_t kzopen (const char *filnam)
 {
 	FILE *fil;
 	int32_t i, j, fileoffs, fileleng;
@@ -2839,7 +2839,7 @@ int32_t kzopen (const char *filnam)
 			kzfs.leng = filelength(_fileno(kzfs.fil));
 			kzfs.pos = 0;
 			kzfs.i = 0;
-			return((int32_t)kzfs.fil);
+			return((intptr_t)kzfs.fil);
 		}
 	}
 	if (kzcheckhash(filnam,&zipnam,&fileoffs,&fileleng,&iscomp)) //Then check mounted ZIP/GRP files
@@ -2854,7 +2854,7 @@ int32_t kzopen (const char *filnam)
 			kzfs.leng = fileleng;
 			kzfs.pos = 0;
 			kzfs.i = 0;
-			return((int32_t)kzfs.fil);
+			return((intptr_t)kzfs.fil);
 		}
 		else
 		{
@@ -2869,7 +2869,7 @@ int32_t kzopen (const char *filnam)
 			kzfs.pos = 0;
 			switch(kzfs.comptyp) //Compression method
 			{
-				case 0: kzfs.i = 0; return((int32_t)kzfs.fil);
+				case 0: kzfs.i = 0; return((intptr_t)kzfs.fil);
 				case 8:
 					if (!pnginited) { pnginited = 1; initpngtables(); }
 					kzfs.comptell = 0;
@@ -2878,7 +2878,7 @@ int32_t kzopen (const char *filnam)
 						//WARNING: No file in ZIP can be > 2GB-32K bytes
 					gslidew = 0x7fffffff; //Force reload at beginning
 
-					return((int32_t)kzfs.fil);
+					return((intptr_t)kzfs.fil);
 				default: fclose(kzfs.fil); kzfs.fil = 0; return(0);
 			}
 		}
@@ -2905,7 +2905,7 @@ int32_t kzopen (const char *filnam)
 			kzfs.leng = filelength(_fileno(kzfs.fil));
 			kzfs.pos = 0;
 			kzfs.i = 0;
-			return((int32_t)kzfs.fil);
+			return((intptr_t)kzfs.fil);
 		}
 	}
 
