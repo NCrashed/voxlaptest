@@ -12,15 +12,18 @@ everything needed to take the runtime green from a fresh session.
   `tests/oracle/golden-hashes.txt`. Authoritative gate.
 - Linux GCC x86_64: builds, links, oracle crashes at startup.
 - Linux Clang x86_64: same.
-- macOS Clang x86_64 (`macos-13` runner): builds, links. Oracle not
-  run by CI but expected to behave like Linux.
+- macOS Clang x86_64: not in CI. The `macos-13` runner has been
+  deprecated by GitHub Actions and jobs queue without ever being
+  assigned. Local x86_64 macOS builds are expected to behave like
+  Linux.
 - macOS Clang arm64 (`macos-latest`): blocked. `<xmmintrin.h>` and
   `<mmintrin.h>` are x86-only headers; voxlap5.c uses 170+ MMX/SSE
   intrinsic calls in opticast / drawboundcubesse / kv6draw. Out of
-  scope here — separate NEON-or-sse2neon stage.
+  scope here — separate NEON-or-sse2neon stage (Stage 5).
 
-CI: see `.github/workflows/ci.yml`. linux-gcc / linux-clang /
-macos-clang are all gating (`continue-on-error` removed in 4.7.9).
+CI: see `.github/workflows/ci.yml`. windows-msvc-x86 / linux-gcc /
+linux-clang are gating. The macos-clang job was removed when the
+macos-13 runner became unschedulable; re-add once Stage 5 lands.
 
 ## Root cause (one line)
 

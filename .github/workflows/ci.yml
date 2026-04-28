@@ -87,20 +87,10 @@ jobs:
       - name: Build
         run: cmake --build build
 
-  macos-clang:
-    name: macOS Clang x86_64 (CMake configure + build)
-    # Pinned to macos-13 (last x86_64 runner). voxlap5.c uses
-    # <xmmintrin.h> + <mmintrin.h> intrinsics in 170+ places — porting
-    # them to NEON is a follow-up effort; until then macos-latest
-    # (Apple Silicon) doesn't have the headers and the build hard-errors.
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-      - name: Show toolchain
-        run: clang --version
-      - name: Install Ninja
-        run: brew install ninja
-      - name: Configure (CMake)
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-      - name: Build
-        run: cmake --build build
+  # macOS coverage is intentionally absent. Two paths are blocked:
+  #   - macos-13 (Intel): the runner has been deprecated by GitHub
+  #     Actions and jobs queue without ever being assigned.
+  #   - macos-latest (Apple Silicon): voxlap5.c uses <xmmintrin.h> and
+  #     <mmintrin.h> in 170+ places; porting to NEON (or sse2neon) is
+  #     tracked as Stage 5 in PORTING-X64.md.
+  # Re-add a macos-clang job once Stage 5 lands.
