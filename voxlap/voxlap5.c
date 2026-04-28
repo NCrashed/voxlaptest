@@ -2153,8 +2153,12 @@ void vrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
 
 void vrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
 {
-	/* Portable scalar replacement; see hrendzfogsse for the fog-blend
-	 * formulation, vrendzsse for the per-pixel uurend handling. */
+	/* Stage 4.9.4: combine 4.9.2's bit-exact-to-scalar fog blend with
+	 * 4.9.3's parallel uurend update. Note: this function is dead code
+	 * under the current oracle (vx5.fogcol is set with the BR-brightness
+	 * bit, which makes it negative → ofogdist stays -1 → opticast picks
+	 * vrendzsse instead — see memory/project_oracle_fog_disabled.md).
+	 * Landing for code-coverage parity with the other three rasterizers. */
 	intptr_t p0, pe, i;
 	int32_t k, l;
 	float dirx, diry;
@@ -2163,6 +2167,61 @@ void vrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iin
 	dirx = optistrx*(float)sx + optiheix*(float)sy + optiaddx;
 	diry = optistry*(float)sx + optiheiy*(float)sy + optiaddy;
 	i = zbufoff;
+	{
+		const __m128 vstrx4 = _mm_set1_ps(optistrx * 4.0f);
+		const __m128 vstry4 = _mm_set1_ps(optistry * 4.0f);
+		__m128 vdx = _mm_setr_ps(dirx,
+		                         dirx + optistrx,
+		                         dirx + 2.0f*optistrx,
+		                         dirx + 3.0f*optistrx);
+		__m128 vdy = _mm_setr_ps(diry,
+		                         diry + optistry,
+		                         diry + 2.0f*optistry,
+		                         diry + 3.0f*optistry);
+		while ((pe - p0) >= 16) {
+			int32_t u0 = uurend[sx  ], d0 = uurend[sx  +MAXXDIM];
+			int32_t u1 = uurend[sx+1], d1 = uurend[sx+1+MAXXDIM];
+			int32_t u2 = uurend[sx+2], d2 = uurend[sx+2+MAXXDIM];
+			int32_t u3 = uurend[sx+3], d3 = uurend[sx+3+MAXXDIM];
+			castdat *c0 = &angstart[u0>>16][iplc           ];
+			castdat *c1 = &angstart[u1>>16][iplc +   iinc  ];
+			castdat *c2 = &angstart[u2>>16][iplc + 2*iinc  ];
+			castdat *c3 = &angstart[u3>>16][iplc + 3*iinc  ];
+			__m128i vdsi = _mm_setr_epi32(c0->dist, c1->dist, c2->dist, c3->dist);
+			__m128  vdst = _mm_cvtepi32_ps(vdsi);
+			__m128  vsqr = _mm_add_ps(_mm_mul_ps(vdx, vdx),
+			                          _mm_mul_ps(vdy, vdy));
+			__m128  vinv = _mm_rsqrt_ps(vsqr);
+			__m128  vz   = _mm_mul_ps(vdst, vinv);
+			_mm_storeu_ps((float *)(p0 + i), vz);
+			/* Per-pixel scalar fog blend, bit-exact to the
+			 * (vx5.fogcol_c - k_c)*l>>15 form the goldens use. */
+			int32_t cols[4];
+			castdat *cv[4]; cv[0]=c0; cv[1]=c1; cv[2]=c2; cv[3]=c3;
+			int n;
+			for (n = 0; n < 4; ++n) {
+				k = cv[n]->col;
+				l = cv[n]->dist;
+				l = (foglut[l>>20] & 32767);
+				cols[n] =  ((((( vx5.fogcol     &255)-( k     &255))*l)>>15)    )
+				        + ((((((vx5.fogcol>> 8)&255)-((k>> 8)&255))*l)>>15)<< 8)
+				        + ((((((vx5.fogcol>>16)&255)-((k>>16)&255))*l)>>15)<<16)
+				        + k;
+			}
+			_mm_storeu_si128((__m128i *)p0, _mm_loadu_si128((const __m128i *)cols));
+			uurend[sx  ] = u0 + d0;
+			uurend[sx+1] = u1 + d1;
+			uurend[sx+2] = u2 + d2;
+			uurend[sx+3] = u3 + d3;
+			vdx = _mm_add_ps(vdx, vstrx4);
+			vdy = _mm_add_ps(vdy, vstry4);
+			iplc += 4 * iinc;
+			sx   += 4;
+			p0   += 16;
+		}
+		dirx = _mm_cvtss_f32(vdx);
+		diry = _mm_cvtss_f32(vdy);
+	}
 	while (p0 < pe) {
 		k = angstart[uurend[sx]>>16][iplc].col;
 		l = angstart[uurend[sx]>>16][iplc].dist;
