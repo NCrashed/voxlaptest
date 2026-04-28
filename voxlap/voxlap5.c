@@ -197,7 +197,9 @@ void mat1(point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, poin
 void mat2(point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *, point3d *);
 
 	//Parallaxing sky variables:
-static int32_t skypic = 0, nskypic = 0, skybpl, skyysiz, skycurlng, skycurdir;
+/* skypic / nskypic store malloc'd sky-texture base addresses; pointer-width on LP64. */
+static intptr_t skypic = 0, nskypic = 0;
+static int32_t skybpl, skyysiz, skycurlng, skycurdir;
 static float skylngmul;
 static point2d *skylng = 0;
 
@@ -206,7 +208,9 @@ extern "C" {
 #endif
 
 	//Parallaxing sky variables (accessed by assembly code)
-int32_t skyoff = 0, skyxsiz, *skylat = 0;
+/* skyoff is a derived sky-texture address; pointer-width on LP64. */
+intptr_t skyoff = 0;
+int32_t skyxsiz, *skylat = 0;
 
 int64_t gi, gcsub[9] =
 {

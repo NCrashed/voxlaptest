@@ -290,10 +290,10 @@ VOXLAP_API extern void voxrestore ();
 VOXLAP_API extern void voxredraw ();
 
 	//High-level (easy) picture loading function:
-VOXLAP_API extern void kpzload (const char *, int32_t *, int32_t *, int32_t *, int32_t *);
+VOXLAP_API extern void kpzload (const char *, intptr_t *, int32_t *, int32_t *, int32_t *);
 	//Low-level PNG/JPG functions:
 VOXLAP_API extern void kpgetdim (const char *, int32_t, int32_t *, int32_t *);
-VOXLAP_API extern int32_t kprender (const char *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+VOXLAP_API extern int32_t kprender (const char *, int32_t, intptr_t, int32_t, int32_t, int32_t, int32_t, int32_t);
 
 	//ZIP functions:
 VOXLAP_API extern int32_t kzaddstack (const char *);

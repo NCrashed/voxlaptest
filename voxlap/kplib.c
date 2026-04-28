@@ -99,7 +99,9 @@ static __inline int32_t filelength (int h)
 #define ASMNAME(x)
 #endif
 
-static int32_t frameplace, bytesperline, xres, yres, globxoffs, globyoffs;
+/* frameplace stores a host framebuffer address; pointer-width on LP64. */
+static intptr_t frameplace;
+static int32_t bytesperline, xres, yres, globxoffs, globyoffs;
 
 static const int32_t pow2mask[32] =
 {
@@ -172,7 +174,9 @@ signed char coltype, filtype, bitdepth;
 
 	//.PNG specific variables:
 static int32_t bakr = 0x80, bakg = 0x80, bakb = 0x80; //this used to be public...
-static int32_t gslidew = 0, gslider = 0, xm, xmn[4], xr0, xr1, xplc, yplc, nfplace;
+static int32_t gslidew = 0, gslider = 0, xm, xmn[4], xr0, xr1, xplc, yplc;
+/* nfplace = frameplace + per-row offset; pointer-width carrier. */
+static intptr_t nfplace;
 static int32_t clen[320], cclen[19], bitpos, filt, xsiz, ysiz;
 static int32_t xsizbpl, ixsiz, ixoff, iyoff, ixstp, iystp, intlac, nbpl, trnsrgb ASMNAME("trnsrgb");
 static int32_t ccind[19] = {16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15};
@@ -777,7 +781,7 @@ static inline int32_t Paeth686 (int32_t a, int32_t b, int32_t c)
 	return(Paeth(a,b,c));
 }
 
-static inline void rgbhlineasm (int32_t x, int32_t xr1, int32_t p, int32_t ixstp)
+static inline void rgbhlineasm (int32_t x, int32_t xr1, intptr_t p, int32_t ixstp)
 {
 	int32_t i;
 	if (!trnsrgb)
@@ -793,7 +797,7 @@ static inline void rgbhlineasm (int32_t x, int32_t xr1, int32_t p, int32_t ixstp
 	}
 }
 
-static inline void pal8hlineasm (int32_t x, int32_t xr1, int32_t p, int32_t ixstp)
+static inline void pal8hlineasm (int32_t x, int32_t xr1, intptr_t p, int32_t ixstp)
 {
 	for(;x>xr1;p+=ixstp,x--) *(int32_t *)p = palcol[olinbuf[x]];
 }
@@ -811,7 +815,8 @@ static inline void pal8hlineasm (int32_t x, int32_t xr1, int32_t p, int32_t ixst
 static int32_t filter1st, filterest;
 static void putbuf (const unsigned char *buf, int32_t leng)
 {
-	int32_t i, x, p;
+	int32_t i, x;
+	intptr_t p;     /* framebuffer cursor (nfplace + per-row offset) */
 
 	if (filt < 0)
 	{
@@ -945,7 +950,7 @@ static void initpngtables()
 }
 
 static int32_t kpngrend (const char *kfilebuf, int32_t kfilength,
-	int32_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
+	intptr_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
 	int32_t daglobxoffs, int32_t daglobyoffs)
 {
 	int32_t i, j, k, bfinal, btype, hlit, hdist, leng;
@@ -1392,7 +1397,8 @@ static void invdct8x8 (int32_t *dc, unsigned char dcflag)
 
 static void yrbrend (int32_t x, int32_t y, int32_t *ldct)
 {
-	int32_t i, j, ox, oy, xx, yy, xxx, yyy, xxxend, yyyend, yv, cr, cb, p, pp, *odc, *dc, *dc2;
+	int32_t i, j, ox, oy, xx, yy, xxx, yyy, xxxend, yyyend, yv, cr, cb, *odc, *dc, *dc2;
+	intptr_t p, pp;     /* framebuffer cursors (frameplace + offsets) */
 
 	odc = ldct; dc2 = &ldct[10<<6];
 	for(yy=0;yy<(lcompvsamp[0]<<3);yy+=8)
@@ -1481,7 +1487,7 @@ static void yrbrend (int32_t x, int32_t y, int32_t *ldct)
 void (*kplib_yrbrend_func)(int32_t,int32_t,int32_t *) = yrbrend;
 
 static int32_t kpegrend (const char *kfilebuf, int32_t kfilength,
-	int32_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
+	intptr_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
 	int32_t daglobxoffs, int32_t daglobyoffs)
 {
 	int32_t i, j, v, leng, xdim, ydim, index, prec, restartcnt, restartinterval;
@@ -1881,11 +1887,12 @@ static unsigned char suffix[4100], filbuffer[768], tempstack[4096];
 static int32_t prefix[4100];
 
 static int32_t kgifrend (const char *kfilebuf, int32_t kfilelength,
-	int32_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
+	intptr_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
 	int32_t daglobxoffs, int32_t daglobyoffs)
 {
 	int32_t i, x, y, xsiz, ysiz, yinc, xend, xspan, yspan, currstr, numbitgoal;
-	int32_t lzcols, dat, blocklen, bitcnt, xoff, yoff, transcol, backcol, *lptr;
+	int32_t lzcols, dat, blocklen, bitcnt, xoff, transcol, backcol, *lptr;
+	intptr_t yoff;     /* row-base address (daframeplace + y*pitch) */
 	char numbits, startnumbits, chunkind, ilacefirst;
 	const unsigned char *ptr, *cptr;
 
@@ -2023,7 +2030,7 @@ static int32_t kgifrend (const char *kfilebuf, int32_t kfilelength,
 	//int32_t imagebytes, filler[4];
 	//char pal6bit[256][3], image[ydim][xdim];
 static int32_t kcelrend (const char *buf, int32_t fleng,
-	int32_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
+	intptr_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
 	int32_t daglobxoffs, int32_t daglobyoffs)
 {
 	int32_t i, x, y, x0, x1, y0, y1, xsiz, ysiz;
@@ -2059,10 +2066,11 @@ static int32_t kcelrend (const char *buf, int32_t fleng,
 //=============================  TARGA begins ================================
 
 static int32_t ktgarend (const char *header, int32_t fleng,
-	int32_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
+	intptr_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
 	int32_t daglobxoffs, int32_t daglobyoffs)
 {
-	int32_t i, p, x, y, pi, xi, yi, x0, x1, y0, y1, xsiz, ysiz, rlestat, colbyte, pixbyte;
+	int32_t i, x, y, pi, xi, yi, x0, x1, y0, y1, xsiz, ysiz, rlestat, colbyte, pixbyte;
+	intptr_t p;        /* framebuffer cursor (daframeplace + offsets) */
 	const unsigned char *fptr, *cptr, *nptr;
 
 		//Ugly and unreliable identification for .TGA!
@@ -2153,7 +2161,7 @@ static int32_t ktgarend (const char *header, int32_t fleng,
 	//                      � rastoff(?): bitmap data �
 	//                      ���������������������������
 static int32_t kbmprend (const char *buf, int32_t fleng,
-	int32_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
+	intptr_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
 	int32_t daglobxoffs, int32_t daglobyoffs)
 {
 	int32_t i, j, x, y, x0, x1, y0, y1, rastoff, headsiz, xsiz, ysiz, cdim, comp, cptrinc, *lptr;
@@ -2265,10 +2273,11 @@ static int32_t kbmprend (const char *buf, int32_t fleng,
 //==============================  PCX begins =================================
 	//Note: currently only supports 8 and 24 bit PCX
 static int32_t kpcxrend (const char *buf, int32_t fleng,
-	int32_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
+	intptr_t daframeplace, int32_t dabytesperline, int32_t daxres, int32_t dayres,
 	int32_t daglobxoffs, int32_t daglobyoffs)
 {
-	int32_t i, j, x, y, p, nplanes, x0, x1, y0, y1, bpl, xsiz, ysiz;
+	int32_t j, x, y, nplanes, x0, x1, y0, y1, bpl, xsiz, ysiz;
+	intptr_t i, p;     /* framebuffer cursors (daframeplace + offsets) */
 	unsigned char c, *cptr;
 
 	if (*(int32_t *)buf != LSWAPIB(0x0801050a)) return(-1);
@@ -2346,9 +2355,10 @@ static int32_t kpcxrend (const char *buf, int32_t fleng,
 
 	//Note:currently supports: DXT1,DXT2,DXT3,DXT4,DXT5,A8R8G8B8
 static int32_t kddsrend (const char *buf, int32_t leng,
-	int32_t frameptr, int32_t bpl, int32_t xdim, int32_t ydim, int32_t xoff, int32_t yoff)
+	intptr_t frameptr, int32_t bpl, int32_t xdim, int32_t ydim, int32_t xoff, int32_t yoff)
 {
 	int32_t x, y, z, xx, yy, xsiz, ysiz, dxt, al[2], ai, j, k, v, c0, c1, stride;
+	intptr_t fbrow;    /* framebuffer cursor (frameptr + offsets) */
 	uint32_t lut[256], r[4], g[4], b[4], a[8], rr, gg, bb;
 	unsigned char *uptr, *wptr;
 
@@ -2363,13 +2373,13 @@ static int32_t kddsrend (const char *buf, int32_t leng,
 		if ((*(int32_t *)&buf[104]) != LSWAPIB(0xff000000)) return(-1);
 		buf += 128;
 
-		j = yoff*bpl + (xoff<<2) + frameptr; xx = (xsiz<<2);
-		if (xoff < 0) { j -= (xoff<<2); buf -= (xoff<<2); xsiz += xoff; }
+		fbrow = yoff*bpl + (xoff<<2) + frameptr; xx = (xsiz<<2);
+		if (xoff < 0) { fbrow -= (xoff<<2); buf -= (xoff<<2); xsiz += xoff; }
 		xsiz = (min(xsiz,xdim-xoff)<<2); ysiz = min(ysiz,ydim);
-		for(y=0;y<ysiz;y++,j+=bpl,buf+=xx)
+		for(y=0;y<ysiz;y++,fbrow+=bpl,buf+=xx)
 		{
 			if ((uint32_t)(y+yoff) >= (uint32_t)ydim) continue;
-			memcpy((void *)j,(void *)buf,xsiz);
+			memcpy((void *)fbrow,(void *)buf,xsiz);
 		}
 		return(0);
 	}
@@ -2476,7 +2486,7 @@ void kpgetdim (const char *buf, int32_t leng, int32_t *xsiz, int32_t *ysiz)
 		lptr = (int32_t *)buf;
 		if ((lptr[0] != LSWAPIB(0x474e5089)) || (lptr[1] != LSWAPIB(0x0a1a0a0d))) return;
 		lptr = &lptr[2];
-		while (((uint32_t)lptr-(uint32_t)buf) < (uint32_t)(leng-16))
+		while ((uintptr_t)((const char *)lptr-buf) < (uintptr_t)(leng-16))
 		{
 			if (lptr[1] == LSWAPIB(0x52444849)) //IHDR
 				{ (*xsiz) = LSWAPIL(lptr[2]); (*ysiz) = LSWAPIL(lptr[3]); break; }
@@ -2486,7 +2496,7 @@ void kpgetdim (const char *buf, int32_t leng, int32_t *xsiz, int32_t *ysiz)
 	else if ((ubuf[0] == 0xff) && (ubuf[1] == 0xd8)) //.JPG
 	{
 		cptr = (unsigned char *)&buf[2];
-		while (((uint32_t)cptr-(uint32_t)buf) < (uint32_t)(leng-8))
+		while ((uintptr_t)((const char *)cptr-buf) < (uintptr_t)(leng-8))
 		{
 			if ((cptr[0] != 0xff) || (cptr[1] == 0xff)) { cptr++; continue; }
 			if ((uint32_t)(cptr[1]-0xc0) < 3)
@@ -2546,7 +2556,7 @@ void kpgetdim (const char *buf, int32_t leng, int32_t *xsiz, int32_t *ysiz)
 	}
 }
 
-int32_t kprender (const char *buf, int32_t leng, int32_t frameptr, int32_t bpl,
+int32_t kprender (const char *buf, int32_t leng, intptr_t frameptr, int32_t bpl,
 					int32_t xdim, int32_t ydim, int32_t xoff, int32_t yoff)
 {
 	unsigned char *ubuf = (unsigned char *)buf;
@@ -3345,7 +3355,7 @@ void kzclose ()
 //====================== ZIP decompression code ends =========================
 //===================== HANDY PICTURE function begins ========================
 
-VOXLAP_API extern void kpzload (const char *filnam, int32_t *pic, int32_t *bpl, int32_t *xsiz, int32_t *ysiz)
+VOXLAP_API extern void kpzload (const char *filnam, intptr_t *pic, int32_t *bpl, int32_t *xsiz, int32_t *ysiz)
 {
 	char *buf;
 	int32_t leng;
