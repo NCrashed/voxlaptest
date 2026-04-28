@@ -31,6 +31,16 @@ if(MSVC)
     # the proper fix — replacing with *_s variants or portable
     # equivalents — belongs in Stage 2/3.
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+else()
+    # Match MSVC's /J: default char to unsigned. The voxlap rle walker
+    # at scum2line:4320 (and friends) does `while (v[0]) v += v[0]*4;`
+    # where v[0] is the next-slab byte-offset divided by 4. For carved
+    # columns tall enough to push that byte past 127, a signed-char
+    # read sign-extends to negative and the loop walks backwards
+    # through vbuf forever — that's the Linux startup hang we hit
+    # post-4.8.4. The original Voxlap project always built with /J
+    # (vcxproj AdditionalOptions); GCC/Clang need the flag explicitly.
+    add_compile_options(-funsigned-char)
 endif()
 
 # --------------------------------------------------------------------------

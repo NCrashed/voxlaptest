@@ -236,7 +236,7 @@ VOXLAP_API extern int32_t isvoxelsolid (int32_t, int32_t, int32_t);
 VOXLAP_API extern int32_t anyvoxelsolid (int32_t, int32_t, int32_t, int32_t);
 VOXLAP_API extern int32_t anyvoxelempty (int32_t, int32_t, int32_t, int32_t);
 VOXLAP_API extern int32_t getfloorz (int32_t, int32_t, int32_t);
-VOXLAP_API extern int32_t getcube (int32_t, int32_t, int32_t);
+VOXLAP_API extern intptr_t getcube (int32_t, int32_t, int32_t); //0:air, 1:unexposed solid, else vbuf col ptr
 
 	//VXL writing functions (optimized & bug-free):
 VOXLAP_API extern void setcube (int32_t, int32_t, int32_t, int32_t);

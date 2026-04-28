@@ -933,7 +933,7 @@ int32_t getfloorz (int32_t x, int32_t y, int32_t z)
 	//   0: air
 	//   1: unexposed solid
 	//else: address to color in vbuf (this can never be 0 or 1)
-int32_t getcube (int32_t x, int32_t y, int32_t z)
+intptr_t getcube (int32_t x, int32_t y, int32_t z)
 {
 	int32_t ceilnum;
 	char *v;
