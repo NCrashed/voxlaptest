@@ -108,7 +108,13 @@ static void build_scene(void) {
 	 * large enough to cover the diagonal of our 448-voxel playable
 	 * box (~633) with headroom. */
 	setMaxScanDist(1024);
-	set_fogcol((int32_t)BR(0x87ceeb));
+	/* Fog colour is a global, not a per-voxel render colour, so it
+	 * must NOT carry the BR brightness bit — that bit makes the int32
+	 * negative, and `voxsetframebuffer`'s `if (vx5.fogcol >= 0)`
+	 * branch silently skips the fog setup, leaving `ofogdist = -1`
+	 * and routing `opticast` through the non-fog rasterizers. Pass
+	 * the raw RGB so the fog code path is actually exercised. */
+	set_fogcol(0x87ceeb);
 
 	setsideshades(0, 0, 0, 0, 0, 0);
 	set_colfunc(curcolfunc);

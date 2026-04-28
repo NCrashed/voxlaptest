@@ -1,5 +1,13 @@
 # Stage 4.9 — Recover SSE inner-loop perf on x86_64
 
+**Status: ✅ Complete (2026-04-29).** All four rasterizers ported
+to portable `<xmmintrin.h>` / `<emmintrin.h>` 4-pixel rsqrtps
+batches with scalar tails. CI green on Windows MSVC x86 + Linux
+GCC + Linux Clang. Only `sprite_above` shifted in `golden-hashes.txt`
+(`59dd31d7cd571c6d` → `50744ab9ed547a8d`); other oracle poses
+proved bit-stable. See "Outcomes" section at the end for what was
+actually exercised vs. what landed as code-coverage-only.
+
 This file is a self-contained handoff. After Stage 4.8 the engine
 **runs** on Windows MSVC x86 and Linux GCC/Clang x86_64 with bit-
 identical oracle hashes; all CI gates green.  But Stage 4.7.5/4.7.6
@@ -245,6 +253,38 @@ diff -u --strip-trailing-cr \
 # Check that no -funsigned-char regression sneaks in
 grep -n 'funsigned-char' CMakeLists.txt   # must still be there post-4.9
 ```
+
+## Outcomes (post-landing notes, 2026-04-29)
+
+What the oracle actually exercised, which informed the refreeze
+decisions:
+
+- **`hrendzsse`** — exercised on `sprite_above` with span=640
+  (full-row horizontal scan). The rsqrtps approximation diverges
+  from the previous scalar `1.0f/sqrtf` form by a few low-bit pixels,
+  shifting that hash. CI Windows MSVC x86 and Linux GCC produced the
+  *same* new hash, so the SSE batch is bit-deterministic across
+  compilers on the gated runners.
+- **`vrendzsse`** — exercised, but only with short spans (the trace
+  caught span=1 on the first call). Most/all vertical scans went
+  through the scalar tail, so no hash shift.
+- **`hrendzfogsse` / `vrendzfogsse`** — *dead code* under the current
+  oracle. `tests/oracle/oracle.c` calls `set_fogcol(BR(0x87ceeb))`
+  where `BR` sets the `0x80000000` brightness bit, making
+  `vx5.fogcol` negative. `voxsetframebuffer`'s
+  `if (vx5.fogcol >= 0)` branch never fires, `ofogdist` stays -1,
+  and `opticast` always picks the non-fog rasterizers. The fog
+  variants still got SSE-rewritten (bit-exact-to-scalar fog blend),
+  but their code path has zero oracle coverage today.
+  See `memory/project_oracle_fog_disabled.md` for context if/when a
+  later stage wants real fog hash coverage (drop the BR wrap on
+  `set_fogcol`, refreeze).
+
+The SSE-RECOVER scope table in this doc claimed `hrendzfogsse` was
+exercised "every pose with `ofogdist >= 0` (oracle sets it)" — that
+turned out to be false because of the BR-brightness wrap. Updating
+the table here would be worth doing if a future stage cares; for
+now this notes the discrepancy.
 
 ## Out of scope (deferred to later stages)
 

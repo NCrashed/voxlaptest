@@ -33,15 +33,16 @@ The engine's host contract is already minimal: `voxsetframebuffer(xres, yres, pi
 6. **Build system** — VS2010 `.sln` with v140 toolset, Windows SDK 8.1, `/QIfist` (deprecated), post-build `install.bat` that isn't in the repo.
 7. **Case-sensitive filename risk** on Linux/macOS for `.vxl`, `.kv6`, `.kfa` assets.
 
-## Progress (as of 2026-04-24)
+## Progress (as of 2026-04-29)
 
 | Stage | Status |
 |---|---|
-| 0 — Baseline & CI | ✅ Complete. Oracle renders 7 fixed poses (4 terrain + 3 sprite) and diffs against frozen goldens on every CI run. |
+| 0 — Baseline & CI | ✅ Complete. Oracle renders 12 fixed poses (terrain + sprite + lit + tile coverage) and diffs against frozen goldens on every CI run. |
 | 1 — CMake + `VOXLAP_API` + VS artifact deletion | ✅ Complete. CMake is the sole build system; `.sln`/`.vcxproj`/`install.bat` are deleted. |
-| 2 — 64-bit-clean the C | ✅ Complete, hash-neutral on MSVC x86. `long`→`int32_t`, `__int64`→`int64_t`, pointer casts flipped to `intptr_t`, structs audited (no blob-serialisation → 64-bit pointer widening is safe), `MAX_PATH` internalised, `setMaxScanDistToMax` VSID=2048 bug clamped. Variable declarations holding pointer values (`frameplace`, `gpixy`, etc.) are still `int32_t` — deferred because they feed the Stage-4-doomed inline asm. |
-| 3 — Replace MSVC inline asm | ◑ Enumerated categories done (see table below). The remaining inline asm in voxlap5.c is MMX/SSE rasterization and 3DNow point4d helpers — these share registers and lookup tables with `v5.asm` and are rewritten as one piece in Stage 4. |
-| 4 — Replace `v5.asm` + MMX inline asm | ⏭ Not started. Natural scope: the ~17 `_asm emms` flushes, ~60 inline `_asm { }` blocks in voxlap5.c, the entire MASM `v5.asm`, and the supporting MSVC-gated helpers (`expandbit256`, `mmxcoloradd`, `mmxcolorsub`). |
+| 2 — 64-bit-clean the C | ✅ Complete, hash-neutral on MSVC x86. `long`→`int32_t`, `__int64`→`int64_t`, pointer casts flipped to `intptr_t`, structs audited (no blob-serialisation → 64-bit pointer widening is safe), `MAX_PATH` internalised, `setMaxScanDistToMax` VSID=2048 bug clamped. Variable declarations holding pointer values (`frameplace`, `gpixy`, etc.) widened in 4.8. |
+| 3 — Replace MSVC inline asm | ✅ Complete. All non-rasterizer inline asm replaced with portable C/intrinsics. The MMX/SSE rasterization fell out of Stage 4. |
+| 4 — Replace `v5.asm` + MMX inline asm | ✅ Complete through 4.8. v5.asm deleted (4.6); grouscanasm scalar port (4.5b); inline `_asm`/`_asm emms` blocks removed (4.7); 64-bit pointer carriers widened (4.8). |
+| 4.9 — Recover SSE inner-loop perf | ✅ Complete. 4-pixel rsqrtps batches restored in `hrendzsse`/`hrendzfogsse`/`vrendzsse`/`vrendzfogsse` via portable `<emmintrin.h>` intrinsics. Only `sprite_above` shifted in goldens (refrozen). See `PORTING-SSE-RECOVER.md`. |
 | 5 — Rust bindings | ⏭ Not started. |
 | 6 — Polish | ⏭ Not started. |
 
