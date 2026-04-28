@@ -367,7 +367,7 @@ int main(void) {
 		switch (poses[i].tile) {
 		case 1:
 			/* 1× zoom, alpha disabled (black==white triggers ignore-alpha). */
-			drawtile((int32_t)(intptr_t)g_tile, TILE_SIZE * 4,
+			drawtile((intptr_t)g_tile, TILE_SIZE * 4,
 			         TILE_SIZE, TILE_SIZE, 8 << 16, 8 << 16,
 			         320 << 16, 240 << 16,
 			         1 << 16, 1 << 16,
@@ -375,7 +375,7 @@ int main(void) {
 			break;
 		case 2:
 			/* 0.5× zoom (xz=yz=32768) — fast 2×2 averaging path. */
-			drawtile((int32_t)(intptr_t)g_tile, TILE_SIZE * 4,
+			drawtile((intptr_t)g_tile, TILE_SIZE * 4,
 			         TILE_SIZE, TILE_SIZE, 8 << 16, 8 << 16,
 			         320 << 16, 240 << 16,
 			         32768, 32768,
@@ -385,7 +385,7 @@ int main(void) {
 			/* 1.5× zoom + alpha modulate-and-blend path. black/white
 			 * differ in alpha (0x40 vs 0xc0), so the alpha branch fires;
 			 * the 0x40-vs-0xc0 channel spread tints the tile cyan-ward. */
-			drawtile((int32_t)(intptr_t)g_tile, TILE_SIZE * 4,
+			drawtile((intptr_t)g_tile, TILE_SIZE * 4,
 			         TILE_SIZE, TILE_SIZE, 8 << 16, 8 << 16,
 			         320 << 16, 240 << 16,
 			         (3 << 16) / 2, (3 << 16) / 2,

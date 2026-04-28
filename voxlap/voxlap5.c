@@ -453,37 +453,38 @@ void print4x6 (int32_t x, int32_t y, int32_t fcol, int32_t bcol, const char *fmt
 	va_list arglist;
 	char st[280], *c;
 	int32_t i, j;
+	intptr_t row, col;     /* framebuffer cursors derived from frameplace */
 
 	if (!fmt) return;
 	va_start(arglist,fmt);
 	vsprintf(st,fmt,arglist);
 	va_end(arglist);
 
-	y = y*bytesperline+(x<<2)+frameplace;
+	row = y*bytesperline+(x<<2)+frameplace;
 	if (bcol < 0)
 	{
-		for(j=20;j>=0;y+=bytesperline,j-=4)
-			for(c=st,x=y;*c;c++,x+=16)
+		for(j=20;j>=0;row+=bytesperline,j-=4)
+			for(c=st,col=row;*c;c++,col+=16)
 			{
 				i = (font4x6[*c]>>j);
-				if (i&8) *(int32_t *)(x   ) = fcol;
-				if (i&4) *(int32_t *)(x+ 4) = fcol;
-				if (i&2) *(int32_t *)(x+ 8) = fcol;
-				if (i&1) *(int32_t *)(x+12) = fcol;
-				if ((*c) == 9) x += 32;
+				if (i&8) *(int32_t *)(col   ) = fcol;
+				if (i&4) *(int32_t *)(col+ 4) = fcol;
+				if (i&2) *(int32_t *)(col+ 8) = fcol;
+				if (i&1) *(int32_t *)(col+12) = fcol;
+				if ((*c) == 9) col += 32;
 			}
 		return;
 	}
 	fcol -= bcol;
-	for(j=20;j>=0;y+=bytesperline,j-=4)
-		for(c=st,x=y;*c;c++,x+=16)
+	for(j=20;j>=0;row+=bytesperline,j-=4)
+		for(c=st,col=row;*c;c++,col+=16)
 		{
 			i = (font4x6[*c]>>j);
-			*(int32_t *)(x   ) = (((i<<28)>>31)&fcol)+bcol;
-			*(int32_t *)(x+ 4) = (((i<<29)>>31)&fcol)+bcol;
-			*(int32_t *)(x+ 8) = (((i<<30)>>31)&fcol)+bcol;
-			*(int32_t *)(x+12) = (((i<<31)>>31)&fcol)+bcol;
-			if ((*c) == 9) { for(i=16;i<48;i+=4) *(int32_t *)(x+i) = bcol; x += 32; }
+			*(int32_t *)(col   ) = (((i<<28)>>31)&fcol)+bcol;
+			*(int32_t *)(col+ 4) = (((i<<29)>>31)&fcol)+bcol;
+			*(int32_t *)(col+ 8) = (((i<<30)>>31)&fcol)+bcol;
+			*(int32_t *)(col+12) = (((i<<31)>>31)&fcol)+bcol;
+			if ((*c) == 9) { for(i=16;i<48;i+=4) *(int32_t *)(col+i) = bcol; col += 32; }
 		}
 }
 
@@ -545,41 +546,42 @@ void print6x8 (int32_t x, int32_t y, int32_t fcol, int32_t bcol, const char *fmt
 	va_list arglist;
 	char st[280], *c, *v;
 	int32_t i, j;
+	intptr_t row, col;     /* framebuffer cursors derived from frameplace */
 
 	if (!fmt) return;
 	va_start(arglist,fmt);
 	vsprintf(st,fmt,arglist);
 	va_end(arglist);
 
-	y = y*bytesperline+(x<<2)+frameplace;
+	row = y*bytesperline+(x<<2)+frameplace;
 	if (bcol < 0)
 	{
-		for(j=1;j<256;y+=bytesperline,j<<=1)
-			for(c=st,x=y;*c;c++,x+=24)
+		for(j=1;j<256;row+=bytesperline,j<<=1)
+			for(c=st,col=row;*c;c++,col+=24)
 			{
 				v = (char *)(((intptr_t)font6x8) + ((int32_t)c[0])*6);
-				if (v[0]&j) *(int32_t *)(x   ) = fcol;
-				if (v[1]&j) *(int32_t *)(x+ 4) = fcol;
-				if (v[2]&j) *(int32_t *)(x+ 8) = fcol;
-				if (v[3]&j) *(int32_t *)(x+12) = fcol;
-				if (v[4]&j) *(int32_t *)(x+16) = fcol;
-				if (v[5]&j) *(int32_t *)(x+20) = fcol;
-				if ((*c) == 9) x += ((2*6)<<2);
+				if (v[0]&j) *(int32_t *)(col   ) = fcol;
+				if (v[1]&j) *(int32_t *)(col+ 4) = fcol;
+				if (v[2]&j) *(int32_t *)(col+ 8) = fcol;
+				if (v[3]&j) *(int32_t *)(col+12) = fcol;
+				if (v[4]&j) *(int32_t *)(col+16) = fcol;
+				if (v[5]&j) *(int32_t *)(col+20) = fcol;
+				if ((*c) == 9) col += ((2*6)<<2);
 			}
 		return;
 	}
 	fcol -= bcol;
-	for(j=1;j<256;y+=bytesperline,j<<=1)
-		for(c=st,x=y;*c;c++,x+=24)
+	for(j=1;j<256;row+=bytesperline,j<<=1)
+		for(c=st,col=row;*c;c++,col+=24)
 		{
 			v = (char *)(((intptr_t)font6x8) + ((int32_t)c[0])*6);
-			*(int32_t *)(x   ) = (((-(v[0]&j))>>31)&fcol)+bcol;
-			*(int32_t *)(x+ 4) = (((-(v[1]&j))>>31)&fcol)+bcol;
-			*(int32_t *)(x+ 8) = (((-(v[2]&j))>>31)&fcol)+bcol;
-			*(int32_t *)(x+12) = (((-(v[3]&j))>>31)&fcol)+bcol;
-			*(int32_t *)(x+16) = (((-(v[4]&j))>>31)&fcol)+bcol;
-			*(int32_t *)(x+20) = (((-(v[5]&j))>>31)&fcol)+bcol;
-			if ((*c) == 9) { for(i=24;i<72;i+=4) *(int32_t *)(x+i) = bcol; x += ((2*6)<<2); }
+			*(int32_t *)(col   ) = (((-(v[0]&j))>>31)&fcol)+bcol;
+			*(int32_t *)(col+ 4) = (((-(v[1]&j))>>31)&fcol)+bcol;
+			*(int32_t *)(col+ 8) = (((-(v[2]&j))>>31)&fcol)+bcol;
+			*(int32_t *)(col+12) = (((-(v[3]&j))>>31)&fcol)+bcol;
+			*(int32_t *)(col+16) = (((-(v[4]&j))>>31)&fcol)+bcol;
+			*(int32_t *)(col+20) = (((-(v[5]&j))>>31)&fcol)+bcol;
+			if ((*c) == 9) { for(i=24;i<72;i+=4) *(int32_t *)(col+i) = bcol; col += ((2*6)<<2); }
 		}
 }
 
@@ -6733,11 +6735,12 @@ ray3d unproject2d(float px, float py) {
 	//(sx,sy,xz,yz) screen coordinates and x&y zoom, all (<<16)
 	//(black,white): black & white shade scale (ARGB format)
 	//   Note: if alphas of black&white are same, then alpha channel ignored
-void drawtile (int32_t tf, int32_t tp, int32_t tx, int32_t ty, int32_t tcx, int32_t tcy,
+void drawtile (intptr_t tf, int32_t tp, int32_t tx, int32_t ty, int32_t tcx, int32_t tcy,
 					int32_t sx, int32_t sy, int32_t xz, int32_t yz, int32_t black, int32_t white)
 {
 	int32_t sx0, sy0, sx1, sy1, x0, y0, x1, y1, x, y, u, v, ui, vi, uu, vv;
-	int32_t p, i, j;
+	int32_t i;
+	intptr_t p, j;     /* p = framebuffer row, j = source-tile row (tf-derived) */
 
 	if (!tf) return;
 	sx0 = sx - mulshr16(tcx,xz); sx1 = sx0 + xz*tx;
@@ -6753,7 +6756,7 @@ void drawtile (int32_t tf, int32_t tp, int32_t tx, int32_t ty, int32_t tcx, int3
 			/* 2× downscale: each output pixel is the byte-wise rounded
 			 * average of a 2×2 source block. Original was an MMX
 			 * pavgb/pshufw/pavgb chain across two 8-byte loads. */
-			int32_t plc;
+			intptr_t plc;     /* source-tile row+column address */
 			for(y=y0,vv=y*vi+v;y<y1;y++,vv+=vi)
 			{
 				p = ylookup[y] + frameplace;
@@ -6902,7 +6905,8 @@ void drawline2d (float x1, float y1, float x2, float y2, int32_t col)
 void drawline2dclip (float x1, float y1, float x2, float y2, float rx0, float ry0, float rz0, float rx1, float ry1, float rz1, int32_t col)
 {
 	float dx, dy, fxresm1, fyresm1, Za, Zb, Zc, z;
-	int32_t i, j, incr, ie, p;
+	int32_t i, j, incr, ie;
+	intptr_t p;       /* framebuffer cursor (frameplace + offsets) */
 
 	dx = x2-x1; dy = y2-y1; if ((dx == 0) && (dy == 0)) return;
 	fxresm1 = (float)xres-.5; fyresm1 = (float)yres-.5;
@@ -6997,7 +7001,8 @@ void drawspherefill (float ox, float oy, float oz, float bakrad, int32_t col)
 {
 	float a, b, c, d, e, f, g, h, t, cxcx, cycy, Za, Zb, Zc, ysq;
 	float r2a, rr2a, nb, nbi, isq, isqi, isqii, cx, cy, cz, rad;
-	int32_t sx1, sy1, sx2, sy2, p, sx;
+	int32_t sx1, sy1, sx2, sy2, sx;
+	intptr_t p, pend;    /* framebuffer cursor + end-row pointer (was: sy2 reused) */
 
 	rad = fabs(bakrad);
 #if (USEZBUFFER == 0)
@@ -7035,7 +7040,7 @@ void drawspherefill (float ox, float oy, float oz, float bakrad, int32_t col)
 	isqi = (h+h+Za+Zb)*rr2a; isqii = Za*rr2a*2;
 
 	p = ylookup[sy1]+frameplace;
-	sy2 = ylookup[sy2]+frameplace;
+	pend = ylookup[sy2]+frameplace;
 #if (USEZBUFFER == 1)
 	if ((*(int32_t *)&bakrad) >= 0)
 	{
@@ -7047,7 +7052,7 @@ void drawspherefill (float ox, float oy, float oz, float bakrad, int32_t col)
 			ftol(nb+t,&sx2);
 			sx2 = min(sx2,xres)-sx1;
 			if (sx2 > 0) clearbuf((void *)((sx1<<2)+p),sx2,col);
-			p += bytesperline; if (p >= sy2) return;
+			p += bytesperline; if (p >= pend) return;
 			isq += isqi; isqi += isqii; nb += nbi;
 		}
 #if (USEZBUFFER == 1)
@@ -7078,15 +7083,15 @@ void drawspherefill (float ox, float oy, float oz, float bakrad, int32_t col)
 					*(int32_t *)(p+(sx<<2)) = col;
 				}
 			sy1++;
-			p += bytesperline; if (p >= sy2) return;
+			p += bytesperline; if (p >= pend) return;
 			isq += isqi; isqi += isqii; nb += nbi;
 		}
 	}
 #endif
 }
 
-void drawpicinquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
-						  int32_t wpic, int32_t wbpl, int32_t wxsiz, int32_t wysiz,
+void drawpicinquad (intptr_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
+						  intptr_t wpic, int32_t wbpl, int32_t wxsiz, int32_t wysiz,
 						  float x0, float y0, float x1, float y1,
 						  float x2, float y2, float x3, float y3)
 {
@@ -7212,7 +7217,7 @@ void drawpicinquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 /* dpqdistlut/dpqmulval/dpqfour were lookup tables for the SSE rcpps
  * batch z-recip in drawspherefill's inner loop, removed in Stage 4.7
  * along with the inline asm. */
-void drawpolyquad (int32_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
+void drawpolyquad (intptr_t rpic, int32_t rbpl, int32_t rxsiz, int32_t rysiz,
 						 float x0, float y0, float z0, float u0, float v0,
 						 float x1, float y1, float z1, float u1, float v1,
 						 float x2, float y2, float z2, float u2, float v2,

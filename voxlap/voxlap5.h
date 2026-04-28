@@ -195,11 +195,11 @@ VOXLAP_API extern void drawline3d (float, float, float, float, float, float, int
 VOXLAP_API extern int32_t project2d (float, float, float, float *, float *, float *);
 VOXLAP_API extern ray3d unproject2d(float, float);
 VOXLAP_API extern void drawspherefill (float, float, float, float, int32_t);
-VOXLAP_API extern void drawpicinquad (int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, float, float, float, float, float, float, float, float);
-VOXLAP_API extern void drawpolyquad (int32_t, int32_t, int32_t, int32_t, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float);
+VOXLAP_API extern void drawpicinquad (intptr_t, int32_t, int32_t, int32_t, intptr_t, int32_t, int32_t, int32_t, float, float, float, float, float, float, float, float);
+VOXLAP_API extern void drawpolyquad (intptr_t, int32_t, int32_t, int32_t, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float, float);
 VOXLAP_API extern void print4x6 (int32_t, int32_t, int32_t, int32_t, const char *, ...);
 VOXLAP_API extern void print6x8 (int32_t, int32_t, int32_t, int32_t, const char *, ...);
-VOXLAP_API extern void drawtile (int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+VOXLAP_API extern void drawtile (intptr_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
 VOXLAP_API extern int32_t screencapture32bit (const char *);
 VOXLAP_API extern int32_t surroundcapture32bit (dpoint3d *, const char *, int32_t);
 
