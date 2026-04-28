@@ -10,13 +10,15 @@ everything needed to take the runtime green from a fresh session.
 
 - Windows MSVC x86: builds, oracle runs, hashes frozen in
   `tests/oracle/golden-hashes.txt`. Authoritative gate.
-- Linux GCC x86_64: builds, oracle runs, hashes frozen in
-  `tests/oracle/golden-hashes-linux.txt`. 10 of 12 hashes match
-  Windows MSVC bit-for-bit; `sprite_above` and `sprite_coco` differ
-  because Stage 4.7.5/4.7.6 replaced the SSE rsqrtss rasterizer
-  inner loop with `1.0/sqrtf` (more accurate but not bit-equal).
-- Linux Clang x86_64: identical hashes to Linux GCC; shares the
-  same Linux golden table.
+- Linux GCC + Clang x86_64 (CI Ubuntu): builds, oracle runs,
+  produces hashes bit-identical to the Windows MSVC golden.
+  Same one golden file works for both platforms. (The scalar
+  1.0/sqrtf rewrite from Stage 4.7.5/4.7.6 happened to match
+  the rsqrtss-derived hashes on this combination of toolchain
+  + libm; other Linux distros / compilers may diverge on the
+  `sprite_above` / `sprite_coco` rows. If that happens, split
+  into per-toolchain tables — but ubuntu-latest is the gating
+  Linux for now.)
 - macOS Clang x86_64: not in CI. The `macos-13` runner has been
   deprecated by GitHub Actions and jobs queue without ever being
   assigned. Local x86_64 macOS builds are expected to behave like
@@ -27,7 +29,7 @@ everything needed to take the runtime green from a fresh session.
   scope here — separate NEON-or-sse2neon stage (Stage 5).
 
 CI: see `.github/workflows/ci.yml`. windows-msvc-x86 / linux-gcc /
-linux-clang all run the oracle and gate on per-platform golden
+linux-clang all run the oracle and gate on the same shared golden
 hashes. The macos-clang job was removed when the macos-13 runner
 became unschedulable; re-add once Stage 5 lands.
 

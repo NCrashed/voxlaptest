@@ -41,12 +41,11 @@ jobs:
 
       - name: Diff hashes against golden
         shell: bash
-        # Windows MSVC x86 is the original/reference platform — its
-        # hashes are frozen in tests/oracle/golden-hashes.txt. Linux
-        # GCC/Clang use a separate per-platform table because the
-        # scalar rasterizer rewrite in 4.7.5/4.7.6 replaced rsqrtss
-        # with 1.0/sqrtf, which is more accurate but not bit-equal
-        # to the SSE recip-sqrt MSVC produces.
+        # tests/oracle/golden-hashes.txt is the single per-scene
+        # reference; Linux GCC + Clang on ubuntu-latest produce
+        # bit-identical hashes to Windows MSVC x86 (the scalar
+        # 1.0/sqrtf rewrite from 4.7.5/4.7.6 happens to match the
+        # SSE rsqrtss approximation MSVC emits, on the CI box).
         run: |
           if [ -f tests/oracle/golden-hashes.txt ]; then
             echo "Comparing against frozen golden-hashes.txt:"
@@ -82,13 +81,16 @@ jobs:
         # oracle finds libvoxlap.so via LD_LIBRARY_PATH at runtime.
         working-directory: build/oracle-run
         run: LD_LIBRARY_PATH=../bin ../bin/oracle
-      - name: Diff hashes against Linux golden
+      - name: Diff hashes against golden
+        # Same per-scene reference as the Windows job. The CI Ubuntu
+        # libm + GCC happen to match MSVC bit-for-bit; non-CI Linux
+        # toolchains may diverge on sprite_* (rsqrtss vs 1.0/sqrtf).
         run: |
-          if [ -f tests/oracle/golden-hashes-linux.txt ]; then
-            echo "Comparing against frozen golden-hashes-linux.txt:"
-            diff -u tests/oracle/golden-hashes-linux.txt build/oracle-run/hashes.txt
+          if [ -f tests/oracle/golden-hashes.txt ]; then
+            echo "Comparing against frozen golden-hashes.txt:"
+            diff -u tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt
           else
-            echo "No tests/oracle/golden-hashes-linux.txt yet — this run establishes the baseline."
+            echo "No tests/oracle/golden-hashes.txt yet — this run establishes the baseline."
             cat build/oracle-run/hashes.txt
           fi
       - name: Upload oracle artifacts
@@ -116,13 +118,10 @@ jobs:
       - name: Run oracle
         working-directory: build/oracle-run
         run: LD_LIBRARY_PATH=../bin ../bin/oracle
-      - name: Diff hashes against Linux golden
-        # Linux GCC and Clang produce identical hashes locally, so they
-        # share one golden table. If a future toolchain divergence
-        # appears, split into golden-hashes-linux-{gcc,clang}.txt.
+      - name: Diff hashes against golden
         run: |
-          if [ -f tests/oracle/golden-hashes-linux.txt ]; then
-            diff -u tests/oracle/golden-hashes-linux.txt build/oracle-run/hashes.txt
+          if [ -f tests/oracle/golden-hashes.txt ]; then
+            diff -u tests/oracle/golden-hashes.txt build/oracle-run/hashes.txt
           else
             cat build/oracle-run/hashes.txt
           fi
