@@ -2082,9 +2082,13 @@ void hrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr
 
 void vrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
 {
-	/* Portable scalar replacement for the SSE asm vertical raster.
-	 * Per-pixel uurend is the running angle index (uurend[sx] + delta);
-	 * angstart[..][iplc] supplies col + dist for the z-buffer write. */
+	/* Stage 4.9.3: 4-pixel SSE batch for the vertical raster. The
+	 * per-pixel `uurend[sx] += uurend[sx+MAXXDIM]` update is parallel-
+	 * safe because uurend[sx+MAXXDIM..] is read-only in this loop and
+	 * uurend[sx..+3] are four distinct lanes; we read the OLD values
+	 * for the angstart[][] gather, do the SSE z math, then write back
+	 * the four new values. iplc / sx / dirx / diry advance by 4 per
+	 * batch iteration (matching what 4 scalar steps would produce). */
 	intptr_t p0, pe, i;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
@@ -2092,6 +2096,48 @@ void vrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
 	dirx = optistrx*(float)sx + optiheix*(float)sy + optiaddx;
 	diry = optistry*(float)sx + optiheiy*(float)sy + optiaddy;
 	i = zbufoff;
+	{
+		const __m128 vstrx4 = _mm_set1_ps(optistrx * 4.0f);
+		const __m128 vstry4 = _mm_set1_ps(optistry * 4.0f);
+		__m128 vdx = _mm_setr_ps(dirx,
+		                         dirx + optistrx,
+		                         dirx + 2.0f*optistrx,
+		                         dirx + 3.0f*optistrx);
+		__m128 vdy = _mm_setr_ps(diry,
+		                         diry + optistry,
+		                         diry + 2.0f*optistry,
+		                         diry + 3.0f*optistry);
+		while ((pe - p0) >= 16) {
+			int32_t u0 = uurend[sx  ], d0 = uurend[sx  +MAXXDIM];
+			int32_t u1 = uurend[sx+1], d1 = uurend[sx+1+MAXXDIM];
+			int32_t u2 = uurend[sx+2], d2 = uurend[sx+2+MAXXDIM];
+			int32_t u3 = uurend[sx+3], d3 = uurend[sx+3+MAXXDIM];
+			castdat *c0 = &angstart[u0>>16][iplc           ];
+			castdat *c1 = &angstart[u1>>16][iplc +   iinc  ];
+			castdat *c2 = &angstart[u2>>16][iplc + 2*iinc  ];
+			castdat *c3 = &angstart[u3>>16][iplc + 3*iinc  ];
+			__m128i vcol = _mm_setr_epi32(c0->col,  c1->col,  c2->col,  c3->col);
+			__m128i vdsi = _mm_setr_epi32(c0->dist, c1->dist, c2->dist, c3->dist);
+			__m128  vdst = _mm_cvtepi32_ps(vdsi);
+			__m128  vsqr = _mm_add_ps(_mm_mul_ps(vdx, vdx),
+			                          _mm_mul_ps(vdy, vdy));
+			__m128  vinv = _mm_rsqrt_ps(vsqr);
+			__m128  vz   = _mm_mul_ps(vdst, vinv);
+			_mm_storeu_si128((__m128i *)p0, vcol);
+			_mm_storeu_ps((float *)(p0 + i), vz);
+			uurend[sx  ] = u0 + d0;
+			uurend[sx+1] = u1 + d1;
+			uurend[sx+2] = u2 + d2;
+			uurend[sx+3] = u3 + d3;
+			vdx = _mm_add_ps(vdx, vstrx4);
+			vdy = _mm_add_ps(vdy, vstry4);
+			iplc += 4 * iinc;
+			sx   += 4;
+			p0   += 16;
+		}
+		dirx = _mm_cvtss_f32(vdx);
+		diry = _mm_cvtss_f32(vdy);
+	}
 	while (p0 < pe) {
 		*(int32_t *)p0 = angstart[uurend[sx]>>16][iplc].col;
 		*(float *)(p0+i) = (float)angstart[uurend[sx]>>16][iplc].dist
