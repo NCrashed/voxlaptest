@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <xmmintrin.h>  /* SSE intrinsics — load/store/add/mul/... _ps */
+#include <emmintrin.h>  /* SSE2 — _mm_*_si128 / _mm_setr_epi32 / _mm_cvtepi32_ps */
 #include <mmintrin.h>   /* MMX intrinsics — _mm_empty / __m64 ops */
 #define VOXLAP5
 #include "voxlap5.h"
@@ -1945,13 +1946,11 @@ void vrendnoz (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
 
 void hrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr, int32_t j)
 {
-	/* Portable scalar replacement for the inline-asm SSE rasterizer.
-	 * Original used rsqrtss for fast 1/sqrt; this uses 1.0/sqrtf,
-	 * which is more accurate but slower and bit-different. SSE was
-	 * also unrolled by 4 with non-temporal stores; that perf is
-	 * deferred (per the Rust+SSE follow-up plan). */
-	/* p0 / pe / i carry framebuffer-derived addresses or offsets and
-	 * must be pointer-width; p1 (param) is still the int column index. */
+	/* Stage 4.9.1: 4-pixel SSE batch via rsqrtps, restoring the perf
+	 * of the inline-asm version that 4.7.5 replaced with scalar
+	 * 1.0/sqrtf. rsqrtps is a 12-bit approximation (no Newton refine),
+	 * matching the historical asm; the tail handles the 0..3 leftover
+	 * pixels with the bit-exact scalar form. */
 	intptr_t p0, pe, i;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
@@ -1959,6 +1958,38 @@ void hrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr, i
 	dirx = optistrx*(float)sx + optiheix*(float)sy + optiaddx;
 	diry = optistry*(float)sx + optiheiy*(float)sy + optiaddy;
 	i = zbufoff;
+	{
+		const __m128 vstrx4 = _mm_set1_ps(optistrx * 4.0f);
+		const __m128 vstry4 = _mm_set1_ps(optistry * 4.0f);
+		__m128 vdx = _mm_setr_ps(dirx,
+		                         dirx + optistrx,
+		                         dirx + 2.0f*optistrx,
+		                         dirx + 3.0f*optistrx);
+		__m128 vdy = _mm_setr_ps(diry,
+		                         diry + optistry,
+		                         diry + 2.0f*optistry,
+		                         diry + 3.0f*optistry);
+		while ((pe - p0) >= 16) {
+			castdat *c0 = &angstart[plc>>16][j]; plc += incr;
+			castdat *c1 = &angstart[plc>>16][j]; plc += incr;
+			castdat *c2 = &angstart[plc>>16][j]; plc += incr;
+			castdat *c3 = &angstart[plc>>16][j]; plc += incr;
+			__m128i vcol = _mm_setr_epi32(c0->col,  c1->col,  c2->col,  c3->col);
+			__m128i vdsi = _mm_setr_epi32(c0->dist, c1->dist, c2->dist, c3->dist);
+			__m128  vdst = _mm_cvtepi32_ps(vdsi);
+			__m128  vsqr = _mm_add_ps(_mm_mul_ps(vdx, vdx),
+			                          _mm_mul_ps(vdy, vdy));
+			__m128  vinv = _mm_rsqrt_ps(vsqr);
+			__m128  vz   = _mm_mul_ps(vdst, vinv);
+			_mm_storeu_si128((__m128i *)p0, vcol);
+			_mm_storeu_ps((float *)(p0 + i), vz);
+			vdx = _mm_add_ps(vdx, vstrx4);
+			vdy = _mm_add_ps(vdy, vstry4);
+			p0 += 16;
+		}
+		dirx = _mm_cvtss_f32(vdx);
+		diry = _mm_cvtss_f32(vdy);
+	}
 	while (p0 != pe) {
 		*(int32_t *)p0 = angstart[plc>>16][j].col;
 		*(float *)(p0+i) = (float)angstart[plc>>16][j].dist
