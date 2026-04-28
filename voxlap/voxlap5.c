@@ -223,7 +223,9 @@ static int32_t gmaxscandist;
  * scope. See docs/grouscan-algorithm.md for the spec this implements. */
 static void grouscanasm_scalar (intptr_t vptr);
 #if (USEZBUFFER == 1)
-int32_t zbufoff;
+/* zbufoff = zbuffermem - frameplace; carried as a pointer-width offset
+ * because two heap regions can sit > 2 GB apart on x86_64 (LP64). */
+intptr_t zbufoff;
 #endif
 #ifdef __cplusplus
 }
@@ -1918,10 +1920,9 @@ void hrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr, i
 	 * which is more accurate but slower and bit-different. SSE was
 	 * also unrolled by 4 with non-temporal stores; that perf is
 	 * deferred (per the Rust+SSE follow-up plan). */
-	/* p0 / pe carry framebuffer addresses derived from frameplace and
+	/* p0 / pe / i carry framebuffer-derived addresses or offsets and
 	 * must be pointer-width; p1 (param) is still the int column index. */
-	intptr_t p0, pe;
-	int32_t i;
+	intptr_t p0, pe, i;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
 	pe = ylookup[sy] + (p1<<2) + frameplace;
@@ -1944,8 +1945,8 @@ void hrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr
 	/* Portable scalar replacement; see hrendzsse for SSE-deferral note.
 	 * Per-pixel fog blend matches the (col*l + (fogcol-col)*l)>>15 form
 	 * the asm derived from `pmulhw mm1, foglut`. */
-	intptr_t p0, pe;
-	int32_t i, k, l;
+	intptr_t p0, pe, i;
+	int32_t k, l;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
 	pe = ylookup[sy] + (p1<<2) + frameplace;
@@ -1974,8 +1975,7 @@ void vrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iinc)
 	/* Portable scalar replacement for the SSE asm vertical raster.
 	 * Per-pixel uurend is the running angle index (uurend[sx] + delta);
 	 * angstart[..][iplc] supplies col + dist for the z-buffer write. */
-	intptr_t p0, pe;
-	int32_t i;
+	intptr_t p0, pe, i;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
 	pe = ylookup[sy] + (p1<<2) + frameplace;
@@ -1999,8 +1999,8 @@ void vrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t iplc, int32_t iin
 {
 	/* Portable scalar replacement; see hrendzfogsse for the fog-blend
 	 * formulation, vrendzsse for the per-pixel uurend handling. */
-	intptr_t p0, pe;
-	int32_t i, k, l;
+	intptr_t p0, pe, i;
+	int32_t k, l;
 	float dirx, diry;
 	p0 = ylookup[sy] + (sx<<2) + frameplace;
 	pe = ylookup[sy] + (p1<<2) + frameplace;
