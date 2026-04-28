@@ -2003,9 +2003,13 @@ void hrendzsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr, i
 
 void hrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr, int32_t j)
 {
-	/* Portable scalar replacement; see hrendzsse for SSE-deferral note.
-	 * Per-pixel fog blend matches the (col*l + (fogcol-col)*l)>>15 form
-	 * the asm derived from `pmulhw mm1, foglut`. */
+	/* Stage 4.9.2: SSE-batched z via rsqrtps (4 pixels), with the
+	 * per-channel fog blend kept scalar inside the batch. The original
+	 * asm did the fog as a 4-lane MMX pmulhw against foglut as 4
+	 * independent 16-bit factors, but the scalar fallback this replaces
+	 * uses a single `l = foglut[..] & 32767` factor for all channels —
+	 * the goldens reflect that simpler form, so we keep it bit-exact
+	 * here and only SIMD the depth math. */
 	intptr_t p0, pe, i;
 	int32_t k, l;
 	float dirx, diry;
@@ -2014,6 +2018,51 @@ void hrendzfogsse (int32_t sx, int32_t sy, int32_t p1, int32_t plc, int32_t incr
 	dirx = optistrx*(float)sx + optiheix*(float)sy + optiaddx;
 	diry = optistry*(float)sx + optiheiy*(float)sy + optiaddy;
 	i = zbufoff;
+	{
+		const __m128 vstrx4 = _mm_set1_ps(optistrx * 4.0f);
+		const __m128 vstry4 = _mm_set1_ps(optistry * 4.0f);
+		__m128 vdx = _mm_setr_ps(dirx,
+		                         dirx + optistrx,
+		                         dirx + 2.0f*optistrx,
+		                         dirx + 3.0f*optistrx);
+		__m128 vdy = _mm_setr_ps(diry,
+		                         diry + optistry,
+		                         diry + 2.0f*optistry,
+		                         diry + 3.0f*optistry);
+		while ((pe - p0) >= 16) {
+			castdat *c0 = &angstart[plc>>16][j]; plc += incr;
+			castdat *c1 = &angstart[plc>>16][j]; plc += incr;
+			castdat *c2 = &angstart[plc>>16][j]; plc += incr;
+			castdat *c3 = &angstart[plc>>16][j]; plc += incr;
+			__m128i vdsi = _mm_setr_epi32(c0->dist, c1->dist, c2->dist, c3->dist);
+			__m128  vdst = _mm_cvtepi32_ps(vdsi);
+			__m128  vsqr = _mm_add_ps(_mm_mul_ps(vdx, vdx),
+			                          _mm_mul_ps(vdy, vdy));
+			__m128  vinv = _mm_rsqrt_ps(vsqr);
+			__m128  vz   = _mm_mul_ps(vdst, vinv);
+			_mm_storeu_ps((float *)(p0 + i), vz);
+			/* Per-channel fog blend, scalar — bit-exact to the
+			 * (vx5.fogcol_c - k_c)*l>>15 form the goldens use. */
+			int32_t cols[4];
+			castdat *cv[4]; cv[0]=c0; cv[1]=c1; cv[2]=c2; cv[3]=c3;
+			int n;
+			for (n = 0; n < 4; ++n) {
+				k = cv[n]->col;
+				l = cv[n]->dist;
+				l = (foglut[l>>20] & 32767);
+				cols[n] =  ((((( vx5.fogcol     &255)-( k     &255))*l)>>15)    )
+				        + ((((((vx5.fogcol>> 8)&255)-((k>> 8)&255))*l)>>15)<< 8)
+				        + ((((((vx5.fogcol>>16)&255)-((k>>16)&255))*l)>>15)<<16)
+				        + k;
+			}
+			_mm_storeu_si128((__m128i *)p0, _mm_loadu_si128((const __m128i *)cols));
+			vdx = _mm_add_ps(vdx, vstrx4);
+			vdy = _mm_add_ps(vdy, vstry4);
+			p0 += 16;
+		}
+		dirx = _mm_cvtss_f32(vdx);
+		diry = _mm_cvtss_f32(vdy);
+	}
 	while (p0 != pe) {
 		k = angstart[plc>>16][j].col;
 		l = angstart[plc>>16][j].dist;
