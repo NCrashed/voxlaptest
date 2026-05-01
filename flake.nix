@@ -11,7 +11,13 @@
     in {
       devShells = forAllSystems ({ pkgs }: {
         default = pkgs.mkShell {
-          packages = with pkgs; [ cmake ninja gcc clang ];
+          packages = with pkgs; [
+            cmake ninja gcc clang
+            # Image inspection — imagemagick reads the oracle's
+            # *.png + *.ppm outputs for byte-level pixel diffing
+            # against the roxlap port.
+            imagemagick
+          ];
         };
       });
 

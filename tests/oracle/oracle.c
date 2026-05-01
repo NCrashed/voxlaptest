@@ -354,6 +354,67 @@ int main(void) {
 		}
 	}
 
+	/* Optional one-shot dump of the meltsphere-extracted sprites to
+	 * .kv6 files. Used by the roxlap port's R6.0e meltsphere byte-
+	 * equality test: roxlap calls its own meltsphere on the same
+	 * loaded oracle.vxl + same hit/radius and byte-compares the
+	 * resulting kv6 against this dump.
+	 *
+	 * The format mirrors voxlap's loadkv6 (`Kvxl` magic + header +
+	 * voxels + xlen + ylen, all little-endian on x86). kv6voxtype is
+	 * a packed 8-byte struct so the voxel array can be fwrite'd
+	 * verbatim. Set the env var to a directory; we write
+	 * `<dir>/sprite_meltsphere.kv6` and `<dir>/sprite_coco_melt.kv6`. */
+	{
+		const char *spr_dir = getenv("ROXLAP_DUMP_SPRITES");
+		if (spr_dir) {
+			static const struct {
+				const char *name;
+				const vx5sprite *spr;
+			} dumps[] = {
+				{ "sprite_meltsphere", &g_sprite },
+				{ "sprite_coco_melt",  &g_coco_sprite },
+			};
+			size_t k;
+			for (k = 0; k < sizeof(dumps) / sizeof(dumps[0]); k++) {
+				char path[512];
+				FILE *fp;
+				const kv6data *kv;
+				size_t n_vox, n_xlen, n_ylen;
+				snprintf(path, sizeof(path), "%s/%s.kv6", spr_dir, dumps[k].name);
+				fp = fopen(path, "wb");
+				if (!fp) {
+					fprintf(stderr, "fopen(%s) failed\n", path);
+					continue;
+				}
+				kv = dumps[k].spr->voxnum;
+				if (!kv) {
+					fprintf(stderr, "%s: voxnum NULL\n", dumps[k].name);
+					fclose(fp);
+					continue;
+				}
+				n_vox = (size_t)kv->numvoxs;
+				n_xlen = (size_t)kv->xsiz;
+				n_ylen = (size_t)kv->xsiz * (size_t)kv->ysiz;
+				fwrite("Kvxl", 1, 4, fp);
+				fwrite(&kv->xsiz, 4, 1, fp);
+				fwrite(&kv->ysiz, 4, 1, fp);
+				fwrite(&kv->zsiz, 4, 1, fp);
+				fwrite(&kv->xpiv, 4, 1, fp);
+				fwrite(&kv->ypiv, 4, 1, fp);
+				fwrite(&kv->zpiv, 4, 1, fp);
+				fwrite(&kv->numvoxs, 4, 1, fp);
+				fwrite(kv->vox, sizeof(kv6voxtype), n_vox, fp);
+				fwrite(kv->xlen, 4, n_xlen, fp);
+				fwrite(kv->ylen, 2, n_ylen, fp);
+				fclose(fp);
+				fprintf(stderr, "saved meltsphere sprite to %s "
+				                "(%zu voxels, %ux%ux%u)\n",
+				        path, n_vox, kv->xsiz, kv->ysiz, kv->zsiz);
+			}
+		}
+	}
+
 	voxsetframebuffer((intptr_t)g_fb, BYTESPERLINE, XRES, YRES);
 
 	hf = fopen("hashes.txt", "w");
