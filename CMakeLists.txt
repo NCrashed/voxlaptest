@@ -113,3 +113,13 @@ add_custom_command(TARGET oracle POST_BUILD
             ${ORACLE_RUN_DIR}/assets
     COMMENT "Copying assets/ into oracle-run/assets/"
 )
+
+# --------------------------------------------------------------------------
+# edit_fixture — CD.2.6 byte-fixture harness. Runs ONE setspans carve on
+# a fresh loadnul world and saves pre/post .vxl files for the roxlap
+# port to validate scum2 + delslab + compilerle byte-equality against
+# voxlap C. Invoked as `edit_fixture <pre.vxl> <post.vxl>`. See
+# tests/edit_fixture/edit_fixture.c.
+# --------------------------------------------------------------------------
+add_executable(edit_fixture tests/edit_fixture/edit_fixture.c)
+target_link_libraries(edit_fixture PRIVATE voxlap)
